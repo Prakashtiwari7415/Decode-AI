@@ -1,0 +1,39 @@
+# =============================================================================
+# DecodeAI Development Docker Compose
+# NOTE: This configuration is intended for LOCAL DEVELOPMENT ONLY.
+# Do NOT use this file directly in production environments.
+# =============================================================================
+
+version: '3.8'
+
+services:
+  backend:
+    image: python:3.12-slim
+    working_dir: /app
+    ports:
+      - "8000:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - ENVIRONMENT=development
+      - ALLOWED_ORIGINS=http://localhost:5173
+      - RATE_LIMIT_PER_MINUTE=10
+      - GEMINI_MODEL=gemini-2.5-flash
+    volumes:
+      - ./backend:/app
+    command: >
+      sh -c "pip install uv && uv sync && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  frontend:
+    image: node:20-slim
+    working_dir: /app
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_BASE_URL=http://backend:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: >
+      sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    depends_on:
+      - backend

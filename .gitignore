@@ -1,0 +1,39 @@
+# Dependency directories
+node_modules/
+.venv/
+env/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Python cache & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage/
+htmlcov/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Vite & build artifacts
+.vite/
+
+# Operating System
+.DS_Store
+Thumbs.db
+
+# IDEs & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

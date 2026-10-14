@@ -1,0 +1,278 @@
+openapi: 3.1.0
+info:
+  title: DecodeAI API
+  description: API for generating interactive video-like lessons from AI code and prompts.
+  version: 0.1.0
+x-status: draft
+
+paths:
+  /api/health:
+    get:
+      summary: Health check endpoint
+      description: Returns service health status and environment info.
+      responses:
+        '200':
+          description: Service is healthy.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  version:
+                    type: string
+                    example: 0.1.0
+                  environment:
+                    type: string
+                    example: development
+                required:
+                  - status
+                  - version
+                  - environment
+
+  /api/lessons/generate:
+    post:
+      summary: Generate an interactive lesson
+      description: Accepts code or prompt content and produces a structured Lesson JSON.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LessonRequest'
+      responses:
+        '200':
+          description: Successfully generated lesson.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lesson'
+        '400':
+          description: Bad Request (RFC 9457 Problem Details)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: array
+                    items:
+                      type: object
+
+components:
+  schemas:
+    ProblemDetails:
+      type: object
+      properties:
+        type:
+          type: string
+          example: about:blank
+        title:
+          type: string
+          example: Bad Request
+        status:
+          type: integer
+          example: 400
+        detail:
+          type: string
+          example: Invalid input parameters provided.
+        instance:
+          type: string
+          example: /api/lessons/generate
+      required:
+        - status
+        - title
+
+    LessonRequest:
+      type: object
+      properties:
+        content:
+          type: string
+          minLength: 10
+          description: Source code or prompt text to explain.
+        content_type:
+          type: string
+          enum: [prompt, code_diff, terminal, completion, explanation]
+          default: explanation
+        language:
+          type: string
+          enum: [en, hi, hinglish]
+          default: en
+        detail_level:
+          type: string
+          enum: [brief, standard, deep]
+          default: standard
+      required:
+        - content
+
+    VisualSpec:
+      type: object
+      properties:
+        scene_type:
+          type: string
+          enum: [text, code_diff, terminal, diagram, comparison]
+        before_code:
+          type: string
+        after_code:
+          type: string
+        language:
+          type: string
+        command:
+          type: string
+        output:
+          type: string
+        exit_code:
+          type: integer
+        mermaid_definition:
+          type: string
+        highlighted_terms:
+          type: array
+          items:
+            type: string
+        animation_style:
+          type: string
+          enum: [fade-slide, typewriter, highlight-sweep]
+      required:
+        - scene_type
+        - highlighted_terms
+        - animation_style
+
+    Caption:
+      type: object
+      properties:
+        offset_ms:
+          type: integer
+        duration_ms:
+          type: integer
+        text:
+          type: string
+      required:
+        - offset_ms
+        - duration_ms
+        - text
+
+    GlossaryEntry:
+      type: object
+      properties:
+        term:
+          type: string
+        definition:
+          type: string
+        example:
+          type: string
+      required:
+        - term
+        - definition
+
+    VerificationItem:
+      type: object
+      properties:
+        id:
+          type: string
+        statement:
+          type: string
+        importance:
+          type: string
+          enum: [must-know, nice-to-know, caution]
+      required:
+        - id
+        - statement
+        - importance
+
+    Scene:
+      type: object
+      properties:
+        scene_id:
+          type: string
+        title:
+          type: string
+        narration_text:
+          type: string
+        visual:
+          $ref: '#/components/schemas/VisualSpec'
+        captions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Caption'
+        uncertainty:
+          type: string
+          enum: [none, low, medium, high]
+        uncertainty_note:
+          type: string
+      required:
+        - scene_id
+        - title
+        - narration_text
+        - visual
+        - captions
+        - uncertainty
+
+    Chapter:
+      type: object
+      properties:
+        chapter_id:
+          type: string
+        title:
+          type: string
+        summary:
+          type: string
+        scenes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Scene'
+      required:
+        - chapter_id
+        - title
+        - summary
+        - scenes
+
+    Lesson:
+      type: object
+      properties:
+        lesson_id:
+          type: string
+        title:
+          type: string
+        language:
+          type: string
+          enum: [en, hi, hinglish]
+        content_type:
+          type: string
+          enum: [prompt, code_diff, terminal, completion, explanation]
+        total_estimated_duration_ms:
+          type: integer
+        chapters:
+          type: array
+          items:
+            $ref: '#/components/schemas/Chapter'
+        glossary:
+          type: array
+          items:
+            $ref: '#/components/schemas/GlossaryEntry'
+        verification_checklist:
+          type: array
+          items:
+            $ref: '#/components/schemas/VerificationItem'
+        gemini_model_version:
+          type: string
+        generated_at:
+          type: string
+      required:
+        - lesson_id
+        - title
+        - language
+        - content_type
+        - total_estimated_duration_ms
+        - chapters
+        - glossary
+        - verification_checklist
+        - gemini_model_version
+        - generated_at
