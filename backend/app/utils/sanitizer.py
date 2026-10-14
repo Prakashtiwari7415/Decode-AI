@@ -38,6 +38,6 @@ def sanitize_content(content: str) -> str:
     lowered = cleaned.lower()
     for forbidden in FORBIDDEN_PATTERNS:
         if forbidden in lowered:
-            raise ValueError(f"Prohibited pattern detected in content: {forbidden}")
+            raise ValueError(f"Prohibited pattern detected: {forbidden}")
 
     return cleaned

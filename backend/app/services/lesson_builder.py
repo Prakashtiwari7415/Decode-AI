@@ -138,10 +138,12 @@ class LessonBuilder:
                 ),
             ]
 
-        # Calculate estimated durations
-        scene1_duration = max(estimate_duration_ms(scene1_narration, lang), 4000)
-        scene2_duration = max(estimate_duration_ms(scene2_narration, lang), 5000)
+        # Chapter 1 scene durations
+        scene1_duration = max(estimate_duration_ms(scene1_narration, lang), 5000)
+        scene2_duration = max(estimate_duration_ms(scene2_narration, lang), 6000)
 
+        # Slice scene 1 into timed captions for progression
+        s1_mid = scene1_duration // 2
         scene1 = Scene(
             scene_id="scene-01-intro",
             title=scene1_title,
@@ -152,12 +154,14 @@ class LessonBuilder:
                 animation_style=AnimationStyle.FADE_SLIDE,
             ),
             captions=[
-                Caption(offset_ms=0, duration_ms=scene1_duration, text=scene1_narration)
+                Caption(offset_ms=0, duration_ms=s1_mid, text=scene1_narration[:len(scene1_narration)//2].strip()),
+                Caption(offset_ms=s1_mid, duration_ms=scene1_duration - s1_mid, text=scene1_narration[len(scene1_narration)//2:].strip()),
             ],
             uncertainty=UncertaintyLevel.NONE,
             uncertainty_note=None,
         )
 
+        s2_mid = scene2_duration // 2
         scene2 = Scene(
             scene_id="scene-02-diff",
             title=scene2_title,
@@ -167,24 +171,99 @@ class LessonBuilder:
                 before_code="result = []\nfor x in items:\n    result.append(x * 2)",
                 after_code="result = [x * 2 for x in items]",
                 language="python",
-                highlighted_terms=["append", "for", "in"],
+                highlighted_terms=["append", "for", "in", "items"],
                 animation_style=AnimationStyle.HIGHLIGHT_SWEEP,
             ),
             captions=[
-                Caption(offset_ms=0, duration_ms=scene2_duration, text=scene2_narration)
+                Caption(offset_ms=0, duration_ms=s2_mid, text=scene2_narration[:len(scene2_narration)//2].strip()),
+                Caption(offset_ms=s2_mid, duration_ms=scene2_duration - s2_mid, text=scene2_narration[len(scene2_narration)//2:].strip()),
             ],
             uncertainty=UncertaintyLevel.NONE,
             uncertainty_note=None,
         )
 
-        chapter = Chapter(
+        chapter1 = Chapter(
             chapter_id="chap-01-transformation",
             title=chap_title,
             summary=chap_summary,
             scenes=[scene1, scene2],
         )
 
-        total_duration = scene1_duration + scene2_duration
+        # Chapter 2: System Architecture & Execution Pipeline
+        if lang == Language.HI:
+            chap2_title = "सिस्टम आर्किटेक्चर और निष्पादन प्रवाह"
+            chap2_summary = "क्लाइंट, एपीआई गेटवे, पायथन बाइटकोड इंजन और मेमोरी एलोकेशन के बीच डेटा प्रवाह को समझें।"
+            scene3_title = "पायथन कॉम्प्रिहेंशन आर्किटेक्चर पाइपलाइन"
+            scene3_narration = "यूज़र क्लाइंट से अनुरोध भेजता है। बैकएंड पार्सर इसे वैलिडेट करता है और पायथन वर्चुअल मशीन बाइटकोड को सीधे मेमोरी में निष्पादित करती है।"
+            scene4_title = "बेंचमार्क और परफॉरमेंस सत्यापन"
+            scene4_narration = "टर्मिनल बेंचमार्क दिखाता है कि लिस्ट कॉम्प्रिहेंशन सी-लेवल लूप अनुकूलन के कारण पारंपरिक लूप से लगभग पैंतीस प्रतिशत तेज़ है।"
+        elif lang == Language.HINGLISH:
+            chap2_title = "System Architecture & Execution Flow"
+            chap2_summary = "Dekhiye Client, API Gateway, Python Bytecode Engine aur Memory Allocation ke beech request flow."
+            scene3_title = "Pipeline Architecture: Client to Python VM"
+            scene3_narration = "User client request bhejta hai, frontend aur backend API coordinate karte hain, aur Python engine optimize bytecode direct memory mein allocate karta hai."
+            scene4_title = "Benchmark aur Performance Verification"
+            scene4_narration = "Terminal benchmark verify karta hai ki list comprehension traditional loop ke comparison mein lagbhag 35% faster execute hoti hai."
+        else:
+            chap2_title = "System Architecture & Runtime Flow"
+            chap2_summary = "Trace how request execution flows from User Client through the API layer to Python Bytecode Engine and Memory Store."
+            scene3_title = "System Architecture: End-to-End Execution Flow"
+            scene3_narration = "The developer submits code through the Frontend Client. The API Gateway forwards the AST to the Python Execution Engine, which allocates the pre-sized list directly in memory."
+            scene4_title = "Performance Benchmark & Verification"
+            scene4_narration = "Running a terminal benchmark reveals that list comprehensions execute up to thirty-five percent faster by avoiding repeated Python-level method lookup overhead."
+
+        scene3_duration = max(estimate_duration_ms(scene3_narration, lang), 8000)
+        scene4_duration = max(estimate_duration_ms(scene4_narration, lang), 6000)
+
+        s3_third = scene3_duration // 3
+        scene3 = Scene(
+            scene_id="scene-03-architecture",
+            title=scene3_title,
+            narration_text=scene3_narration,
+            visual=VisualSpec(
+                scene_type=SceneType.DIAGRAM,
+                mermaid_definition="graph LR\n  User[User Client] --> Frontend[Frontend React]\n  Frontend --> API[API Gateway / FastAPI]\n  API --> Engine[Python Bytecode Engine]\n  Engine --> Memory[(Pre-sized Memory Store)]",
+                highlighted_terms=["User Client", "Frontend React", "API Gateway", "Python Bytecode Engine", "Memory Store"],
+                animation_style=AnimationStyle.FADE_SLIDE,
+            ),
+            captions=[
+                Caption(offset_ms=0, duration_ms=s3_third, text="1. Client initiates request to API Gateway"),
+                Caption(offset_ms=s3_third, duration_ms=s3_third, text="2. Backend validates & compiles AST into optimized Bytecode"),
+                Caption(offset_ms=s3_third * 2, duration_ms=scene3_duration - (s3_third * 2), text="3. Memory buffer pre-allocated and response streamed back"),
+            ],
+            uncertainty=UncertaintyLevel.NONE,
+            uncertainty_note=None,
+        )
+
+        s4_mid = scene4_duration // 2
+        scene4 = Scene(
+            scene_id="scene-04-benchmark",
+            title=scene4_title,
+            narration_text=scene4_narration,
+            visual=VisualSpec(
+                scene_type=SceneType.TERMINAL,
+                command='python -m timeit -s "items=range(1000)" "[x * 2 for x in items]"',
+                output="10000 loops, best of 5: 38.2 usec per loop (vs 58.7 usec with loop.append)",
+                exit_code=0,
+                highlighted_terms=["timeit", "38.2 usec", "35% faster", "LIST_APPEND"],
+                animation_style=AnimationStyle.TYPEWRITER,
+            ),
+            captions=[
+                Caption(offset_ms=0, duration_ms=s4_mid, text=scene4_narration[:len(scene4_narration)//2].strip()),
+                Caption(offset_ms=s4_mid, duration_ms=scene4_duration - s4_mid, text=scene4_narration[len(scene4_narration)//2:].strip()),
+            ],
+            uncertainty=UncertaintyLevel.LOW,
+            uncertainty_note="Performance gain depends on Python runtime version (3.11+ specializing adaptive interpreter).",
+        )
+
+        chapter2 = Chapter(
+            chapter_id="chap-02-architecture",
+            title=chap2_title,
+            summary=chap2_summary,
+            scenes=[scene3, scene4],
+        )
+
+        total_duration = scene1_duration + scene2_duration + scene3_duration + scene4_duration
 
         return Lesson(
             lesson_id="lesson-fixture-001",
@@ -192,7 +271,7 @@ class LessonBuilder:
             language=lang,
             content_type=request.content_type,
             total_estimated_duration_ms=total_duration,
-            chapters=[chapter],
+            chapters=[chapter1, chapter2],
             glossary=glossary,
             verification_checklist=verification,
             gemini_model_version="gemini-2.5-flash",
