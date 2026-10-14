@@ -6,6 +6,7 @@ from jinja2 import Environment, FileSystemLoader
 from app.config import get_settings
 from app.models.common import (
     AnimationStyle,
+    GroundingCategory,
     Language,
     SceneType,
     UncertaintyLevel,
@@ -185,6 +186,8 @@ class LessonBuilder:
             ],
             uncertainty=UncertaintyLevel.NONE,
             uncertainty_note=None,
+            grounding_category=GroundingCategory.OBSERVED,
+            what_to_verify=["Verify input iterable is valid and non-null before comprehension."],
         )
 
         s2_mid = scene2_duration // 2
@@ -214,6 +217,8 @@ class LessonBuilder:
             ],
             uncertainty=UncertaintyLevel.NONE,
             uncertainty_note=None,
+            grounding_category=GroundingCategory.OBSERVED,
+            what_to_verify=["Check that loop variable does not shadow outer scope variables."],
         )
 
         chapter1 = Chapter(
@@ -287,6 +292,8 @@ class LessonBuilder:
             ],
             uncertainty=UncertaintyLevel.NONE,
             uncertainty_note=None,
+            grounding_category=GroundingCategory.INFERRED,
+            what_to_verify=["Inspect AST compilation and bytecode dis.dis() output locally."],
         )
 
         s4_mid = scene4_duration // 2
@@ -316,6 +323,8 @@ class LessonBuilder:
             ],
             uncertainty=UncertaintyLevel.LOW,
             uncertainty_note="Performance gain depends on Python runtime version (3.11+ specializing adaptive interpreter).",
+            grounding_category=GroundingCategory.NEEDS_VERIFICATION,
+            what_to_verify=["Run benchmark on target production machine and hardware."],
         )
 
         chapter2 = Chapter(
@@ -360,4 +369,6 @@ class LessonBuilder:
             detail_level=request.detail_level.value,
         )
 
-        return await self.gemini_client.generate_lesson(rendered_prompt)
+        return await self.gemini_client.generate_lesson(
+            rendered_prompt, user_content=request.content
+        )

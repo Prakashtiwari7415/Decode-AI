@@ -6,6 +6,7 @@ export type UncertaintyLevel = 'none' | 'low' | 'medium' | 'high';
 export type DetailLevel = 'brief' | 'standard' | 'deep';
 export type VerificationImportance = 'must-know' | 'nice-to-know' | 'caution';
 export type AnimationStyle = 'fade-slide' | 'typewriter' | 'highlight-sweep';
+export type GroundingCategory = 'observed' | 'inferred' | 'needs_verification';
 
 export type VoiceName = 'Puck' | 'Charon' | 'Kore' | 'Fenrir' | 'Aoede';
 
@@ -55,6 +56,7 @@ export interface VerificationItem {
   id: string;
   statement: string;
   importance: VerificationImportance;
+  grounding?: GroundingCategory;
 }
 
 export interface Scene {
@@ -65,6 +67,8 @@ export interface Scene {
   captions: Caption[];
   uncertainty: UncertaintyLevel;
   uncertainty_note?: string;
+  grounding_category?: GroundingCategory;
+  what_to_verify?: string[];
 }
 
 export interface Chapter {

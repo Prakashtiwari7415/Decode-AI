@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useLessonStore } from '../../stores/lessonStore';
 import { VerificationImportance } from '../../types/lesson';
 
@@ -14,6 +14,29 @@ export const CompanionPanel: React.FC = () => {
     checkedVerificationIds,
     toggleVerificationItem,
   } = useLessonStore();
+
+  const currentScene = useMemo(() => {
+    if (!lesson) return null;
+    return lesson.chapters[activeChapterIndex]?.scenes[activeSceneIndex] || null;
+  }, [lesson, activeChapterIndex, activeSceneIndex]);
+
+  const groundingStats = useMemo(() => {
+    if (!lesson) return { observed: 0, inferred: 0, needsVerification: 0 };
+    let observed = 0;
+    let inferred = 0;
+    let needsVerification = 0;
+
+    lesson.chapters.forEach((ch) => {
+      ch.scenes.forEach((sc) => {
+        const cat = sc.grounding_category || 'observed';
+        if (cat === 'observed') observed++;
+        else if (cat === 'inferred') inferred++;
+        else needsVerification++;
+      });
+    });
+
+    return { observed, inferred, needsVerification };
+  }, [lesson]);
 
   if (!lesson) return null;
 
@@ -200,7 +223,24 @@ export const CompanionPanel: React.FC = () => {
 
         {/* 3. Verification Checklist Tab */}
         {activeTab === 'verification' && (
-          <div className="space-y-3">
+          <div className="space-y-3.5">
+            {/* Active Scene Actionable Checks */}
+            {currentScene?.what_to_verify && currentScene.what_to_verify.length > 0 && (
+              <div className="p-3 rounded-xl border border-indigo-500/30 bg-indigo-950/30 space-y-2">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-300">
+                  <span>🎯</span>
+                  <span>Active Scene Local Checks ({currentScene.title}):</span>
+                </div>
+                <ul className="space-y-1 pl-4 text-xs text-slate-300 list-disc">
+                  {currentScene.what_to_verify.map((check, idx) => (
+                    <li key={idx} className="leading-snug">
+                      {check}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <p className="text-xs text-slate-400">
               Track recommended sanity checks before applying changes to production:
             </p>
@@ -225,9 +265,18 @@ export const CompanionPanel: React.FC = () => {
                     className="mt-0.5 rounded border-slate-700 text-decodeai-primary focus:ring-0 focus:ring-offset-0 cursor-pointer"
                   />
                   <div className="flex-1 space-y-1.5">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between flex-wrap gap-1">
                       <span className="text-[10px] font-mono text-slate-500">#{item.id}</span>
-                      {getImportanceBadge(item.importance)}
+                      <div className="flex items-center gap-1.5">
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                          {item.grounding === 'observed'
+                            ? '🔍 Observed'
+                            : item.grounding === 'inferred'
+                            ? '💡 Inferred'
+                            : '⚠️ Verify'}
+                        </span>
+                        {getImportanceBadge(item.importance)}
+                      </div>
                     </div>
                     <p className={`text-xs leading-relaxed ${isChecked ? 'line-through text-slate-400' : ''}`}>
                       {item.statement}
@@ -264,6 +313,33 @@ export const CompanionPanel: React.FC = () => {
                   <span className="font-mono text-slate-200">{lesson.gemini_model_version}</span>
                 </div>
               </div>
+            </div>
+
+            {/* Evidence Grounding Breakdown & Trust Model */}
+            <div className="p-4 rounded-xl border border-slate-800 bg-slate-950/60 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                  Evidence Grounding Breakdown
+                </span>
+                <span className="text-[10px] text-emerald-400 font-semibold">Static Analysis</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="p-2 rounded-lg bg-emerald-950/30 border border-emerald-900/40">
+                  <span className="text-base font-bold text-emerald-300 block">{groundingStats.observed}</span>
+                  <span className="text-[10px] text-emerald-400/80">Observed</span>
+                </div>
+                <div className="p-2 rounded-lg bg-cyan-950/30 border border-cyan-900/40">
+                  <span className="text-base font-bold text-cyan-300 block">{groundingStats.inferred}</span>
+                  <span className="text-[10px] text-cyan-400/80">Inferred</span>
+                </div>
+                <div className="p-2 rounded-lg bg-amber-950/30 border border-amber-900/40">
+                  <span className="text-base font-bold text-amber-300 block">{groundingStats.needsVerification}</span>
+                  <span className="text-[10px] text-amber-400/80">To Verify</span>
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed border-t border-slate-800 pt-2">
+                🔒 <strong>Safety Guarantee:</strong> DecodeAI analyzes code patterns and AST semantics statically. No user code is executed in sandboxes or runtime servers. Always verify inferred causes locally.
+              </p>
             </div>
 
             <div className="p-3 rounded-xl border border-slate-800 bg-slate-950/60 space-y-1">

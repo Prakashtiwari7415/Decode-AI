@@ -34,6 +34,8 @@ const mockLesson: Lesson = {
           },
           captions: [{ offset_ms: 0, duration_ms: 5000, text: 'Three lines condense into one.' }],
           uncertainty: 'none',
+          grounding_category: 'observed',
+          what_to_verify: ['Check that items is iterable before execution.'],
         },
       ],
     },
@@ -54,6 +56,8 @@ const mockLesson: Lesson = {
           captions: [{ offset_ms: 0, duration_ms: 6000, text: 'Request flows to API Gateway.' }],
           uncertainty: 'low',
           uncertainty_note: 'Runtime speed depends on Python interpreter version',
+          grounding_category: 'inferred',
+          what_to_verify: ['Inspect API gateway connection limits.'],
         },
       ],
     },
@@ -70,11 +74,13 @@ const mockLesson: Lesson = {
       id: 'chk-01',
       statement: 'Ensure input iterable is non-mutated after execution.',
       importance: 'must-know',
+      grounding: 'needs_verification',
     },
     {
       id: 'chk-02',
       statement: 'Check for complex nested conditionals where standard loops are clearer.',
       importance: 'caution',
+      grounding: 'needs_verification',
     },
   ],
   gemini_model_version: 'gemini-2.5-flash',
@@ -270,5 +276,30 @@ describe('Player Components', () => {
 
     // Clean up
     useLessonStore.getState().setActiveHighlightTerm(null);
+  });
+
+  it('renders Evidence Grounding badges and trust indicators in PlayerViewport and CompanionPanel', () => {
+    // 1. PlayerViewport renders Observed Fact badge
+    render(<PlayerViewport />);
+    expect(screen.getAllByText(/Observed/i).length).toBeGreaterThan(0);
+
+    // 2. CompanionPanel renders checklist with active scene checks and grounding badges
+    render(<CompanionPanel />);
+    const checklistTab = screen.getByRole('button', { name: /Checklist/i });
+    fireEvent.click(checklistTab);
+
+    // Active Scene Local Checks
+    expect(screen.getByText(/Active Scene Local Checks/i)).toBeInTheDocument();
+    expect(screen.getByText(/Check that items is iterable before execution/i)).toBeInTheDocument();
+    // Grounding tag
+    expect(screen.getAllByText(/Verify/i).length).toBeGreaterThan(0);
+
+    // 3. Switch to Overview Tab to inspect Evidence Grounding Breakdown
+    const overviewTab = screen.getByRole('button', { name: /Overview/i });
+    fireEvent.click(overviewTab);
+
+    expect(screen.getByText(/Evidence Grounding Breakdown/i)).toBeInTheDocument();
+    expect(screen.getByText(/Static Analysis/i)).toBeInTheDocument();
+    expect(screen.getByText(/Safety Guarantee/i)).toBeInTheDocument();
   });
 });

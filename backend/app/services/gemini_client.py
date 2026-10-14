@@ -10,6 +10,7 @@ from google import genai
 from google.genai import errors, types
 
 from app.models.lesson import Caption, Lesson
+from app.services.quality_validator import validate_and_sanitize_lesson_quality
 
 logger = logging.getLogger("decodeai.gemini")
 
@@ -95,11 +96,12 @@ class GeminiClient:
             )
         return self._client
 
-    async def generate_lesson(self, prompt: str) -> Lesson:
+    async def generate_lesson(self, prompt: str, user_content: str | None = None) -> Lesson:
         """Sends prompt to Gemini with JSON schema enforcement and returns validated Lesson.
 
         Args:
             prompt: Rendered Jinja2 prompt containing instructions and user content.
+            user_content: Original raw user content for evidence grounding validation.
 
         Returns:
             Validated, enriched Lesson instance.
@@ -207,10 +209,15 @@ class GeminiClient:
             logger.error("Pydantic schema validation error on Gemini output: %s", exc)
             raise GeminiModelOutputError(f"Model output schema validation failed: {exc}") from exc
 
-        # Enrich and normalize lesson
-        return self._enrich_lesson(lesson, used_model=used_model)
+        # Enrich, quality-validate, and normalize lesson
+        return self._enrich_lesson(lesson, used_model=used_model, user_content=user_content)
 
-    def _enrich_lesson(self, lesson: Lesson, used_model: str | None = None) -> Lesson:
+    def _enrich_lesson(
+        self,
+        lesson: Lesson,
+        used_model: str | None = None,
+        user_content: str | None = None,
+    ) -> Lesson:
         """Enrich model output with backend-verified identifiers, timestamps, and duration calculations."""
         # 1. Lesson ID
         if not lesson.lesson_id or lesson.lesson_id.startswith("string"):
@@ -241,4 +248,6 @@ class GeminiClient:
                 total_duration += scene_duration
 
         lesson.total_estimated_duration_ms = total_duration
-        return lesson
+
+        # 4. Deterministic quality and evidence grounding validation
+        return validate_and_sanitize_lesson_quality(lesson, user_content=user_content)

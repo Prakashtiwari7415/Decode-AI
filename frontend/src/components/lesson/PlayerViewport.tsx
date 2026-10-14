@@ -86,6 +86,54 @@ export const PlayerViewport: React.FC = () => {
             </span>
           )}
 
+          {/* Grounding / Evidence Level Pill */}
+          {scene.grounding_category && (
+            <div className="relative group/grounding">
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 cursor-help ${
+                  scene.grounding_category === 'observed'
+                    ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300'
+                    : scene.grounding_category === 'inferred'
+                    ? 'bg-cyan-500/20 border border-cyan-500/40 text-cyan-300'
+                    : 'bg-amber-500/20 border border-amber-500/40 text-amber-300'
+                }`}
+              >
+                <span>
+                  {scene.grounding_category === 'observed'
+                    ? '🔍'
+                    : scene.grounding_category === 'inferred'
+                    ? '💡'
+                    : '⚠️'}
+                </span>
+                <span className="capitalize">
+                  {scene.grounding_category === 'needs_verification'
+                    ? 'Needs Verification'
+                    : scene.grounding_category}
+                </span>
+              </span>
+              <div className="opacity-0 group-hover/grounding:opacity-100 transition-opacity absolute right-0 top-6 w-56 p-2 rounded-lg bg-slate-900 border border-slate-700 text-[11px] text-slate-200 shadow-2xl z-30 pointer-events-none">
+                {scene.grounding_category === 'observed' && (
+                  <p>
+                    <strong className="text-emerald-400">Observed Fact:</strong> Directly present in
+                    your pasted code, prompt, or terminal error.
+                  </p>
+                )}
+                {scene.grounding_category === 'inferred' && (
+                  <p>
+                    <strong className="text-cyan-400">Inferred Deduction:</strong> Plausible
+                    technical explanation deduced from visible code patterns.
+                  </p>
+                )}
+                {scene.grounding_category === 'needs_verification' && (
+                  <p>
+                    <strong className="text-amber-400">Needs Verification:</strong> Hypothesis
+                    requiring independent local checks, missing dependencies, or tests.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
           {scene.uncertainty !== 'none' && (
             <div className="relative group/uncertainty">
               <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-bold flex items-center gap-1 cursor-help">

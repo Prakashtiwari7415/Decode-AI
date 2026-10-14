@@ -40,6 +40,14 @@ class UncertaintyLevel(StrEnum):
     HIGH = "high"
 
 
+class GroundingCategory(StrEnum):
+    """Categorization of explanation grounding against user input."""
+
+    OBSERVED = "observed"
+    INFERRED = "inferred"
+    NEEDS_VERIFICATION = "needs_verification"
+
+
 class DetailLevel(StrEnum):
     """Depth of breakdown requested by the user."""
 

@@ -5,8 +5,9 @@ from fastapi.responses import JSONResponse
 
 from app.models.lesson import Lesson
 from app.models.request import LessonRequest
-from app.services.gemini_client import GeminiError
+from app.services.gemini_client import GeminiError, GeminiModelOutputError
 from app.services.lesson_builder import LessonBuilder
+from app.services.quality_validator import LessonQualityError
 from app.utils.sanitizer import sanitize_content
 
 router = APIRouter(tags=["Lessons"])
@@ -74,6 +75,8 @@ async def generate_lesson(payload: LessonRequest, request: Request) -> Lesson | 
         # Build and return the Lesson (invokes Gemini or returns fixture if use_fixture=True)
         builder = LessonBuilder()
         return await builder.build(payload)
+    except LessonQualityError as exc:
+        return rfc9457_gemini_error_response(request, GeminiModelOutputError(str(exc)))
     except ValueError as exc:
         return rfc9457_value_error_response(request, exc)
     except GeminiError as exc:

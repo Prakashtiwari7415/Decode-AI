@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 from app.models.common import (
     AnimationStyle,
     ContentType,
+    GroundingCategory,
     Language,
     SceneType,
     UncertaintyLevel,
@@ -109,6 +110,10 @@ class VerificationItem(BaseModel):
     importance: VerificationImportance = Field(
         default=VerificationImportance.MUST_KNOW, description="Criticality level"
     )
+    grounding: GroundingCategory = Field(
+        default=GroundingCategory.NEEDS_VERIFICATION,
+        description="Grounding level for this verification check",
+    )
 
     @field_validator("importance", mode="before")
     @classmethod
@@ -124,6 +129,21 @@ class VerificationItem(BaseModel):
             if clean in {"nice-to-know", "nice_to_know", "low", "optional"}:
                 return VerificationImportance.NICE_TO_KNOW
         return VerificationImportance.MUST_KNOW
+
+    @field_validator("grounding", mode="before")
+    @classmethod
+    def normalize_grounding(cls, value: Any) -> GroundingCategory:
+        if isinstance(value, GroundingCategory):
+            return value
+        if isinstance(value, str):
+            clean = value.lower().strip().replace("-", "_")
+            if clean in {"observed", "fact", "direct"}:
+                return GroundingCategory.OBSERVED
+            if clean in {"inferred", "inference", "deduction", "hypothesis"}:
+                return GroundingCategory.INFERRED
+            if clean in {"needs_verification", "verify", "unverified", "action"}:
+                return GroundingCategory.NEEDS_VERIFICATION
+        return GroundingCategory.NEEDS_VERIFICATION
 
 
 class Scene(BaseModel):
@@ -142,6 +162,14 @@ class Scene(BaseModel):
         default=None,
         description="Explanation when uncertainty is low/medium/high",
     )
+    grounding_category: GroundingCategory = Field(
+        default=GroundingCategory.OBSERVED,
+        description="Whether this scene presents observed facts, inferred causes, or items needing verification",
+    )
+    what_to_verify: list[str] = Field(
+        default_factory=list,
+        description="Concrete, actionable verification steps for the developer",
+    )
 
     @field_validator("uncertainty", mode="before")
     @classmethod
@@ -154,6 +182,21 @@ class Scene(BaseModel):
                 if level.value == clean:
                     return level
         return UncertaintyLevel.NONE
+
+    @field_validator("grounding_category", mode="before")
+    @classmethod
+    def normalize_scene_grounding(cls, value: Any) -> GroundingCategory:
+        if isinstance(value, GroundingCategory):
+            return value
+        if isinstance(value, str):
+            clean = value.lower().strip().replace("-", "_")
+            if clean in {"observed", "fact", "direct", "syntax"}:
+                return GroundingCategory.OBSERVED
+            if clean in {"inferred", "inference", "deduction", "cause", "hypothesis"}:
+                return GroundingCategory.INFERRED
+            if clean in {"needs_verification", "verify", "unverified", "caveat", "action"}:
+                return GroundingCategory.NEEDS_VERIFICATION
+        return GroundingCategory.OBSERVED
 
 
 class Chapter(BaseModel):
