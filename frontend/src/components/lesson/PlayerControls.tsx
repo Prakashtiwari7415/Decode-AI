@@ -1,11 +1,20 @@
 import React, { useMemo } from 'react';
 import { useLessonStore } from '../../stores/lessonStore';
+import { VoiceName } from '../../types/lesson';
 import { ProgressBar } from './ProgressBar';
 
 interface PlayerControlsProps {
   onToggleFullscreen?: () => void;
   isFullscreen?: boolean;
 }
+
+const PREBUILT_VOICES: { id: VoiceName; label: string; desc: string }[] = [
+  { id: 'Puck', label: 'Puck', desc: 'Clear & Engaging (Standard)' },
+  { id: 'Kore', label: 'Kore', desc: 'Natural & Balanced' },
+  { id: 'Charon', label: 'Charon', desc: 'Deep & Informative' },
+  { id: 'Fenrir', label: 'Fenrir', desc: 'Authoritative & Energetic' },
+  { id: 'Aoede', label: 'Aoede', desc: 'Bright & Articulate' },
+];
 
 export const PlayerControls: React.FC<PlayerControlsProps> = ({
   onToggleFullscreen,
@@ -18,6 +27,11 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
     playbackSpeed,
     isMuted,
     captionsEnabled,
+    selectedVoice,
+    narrationEnabled,
+    audioLoading,
+    audioError,
+    captionOnlyFallback,
     togglePlay,
     restart,
     prevScene,
@@ -26,6 +40,9 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
     toggleMute,
     toggleCaptions,
     setPlaybackSpeed,
+    setSelectedVoice,
+    setNarrationEnabled,
+    setCaptionOnlyFallback,
   } = useLessonStore();
 
   const canGoPrevChapter = activeChapterIndex > 0;
@@ -45,6 +62,34 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
 
   return (
     <div className="w-full bg-slate-900/95 border-t border-slate-800 px-4 py-3 rounded-b-xl space-y-2 select-none">
+      {/* Audio Loading & Error Notifications */}
+      {audioLoading && (
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-950/60 border border-indigo-800/60 text-xs text-indigo-300">
+          <svg className="animate-spin h-3.5 w-3.5 text-cyan-400 shrink-0" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+          </svg>
+          <span>Synthesizing scene audio with Gemini TTS ({selectedVoice})...</span>
+        </div>
+      )}
+
+      {audioError && !audioLoading && (
+        <div className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-amber-950/60 border border-amber-800/60 text-xs text-amber-200">
+          <div className="flex items-center gap-2 overflow-hidden">
+            <span>⚠️</span>
+            <span className="truncate">{audioError}</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setCaptionOnlyFallback(true)}
+              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 transition-colors"
+            >
+              Caption-Only Mode
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Progress Bar */}
       <ProgressBar />
 
@@ -139,42 +184,77 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
           </div>
         </div>
 
-        {/* Right Side: Settings & Extras */}
-        <div className="flex items-center gap-2">
-          {/* Voice Narration Audio Toggle */}
-          <div className="relative group">
-            <button
-              onClick={toggleMute}
-              className={`p-1.5 rounded-lg text-xs font-medium border transition-colors flex items-center gap-1.5 ${
-                !isMuted
-                  ? 'bg-indigo-950/60 border-indigo-700/60 text-indigo-300 hover:bg-indigo-900/60'
-                  : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
-              }`}
-              title={isMuted ? 'Unmute Speech Narration (M)' : 'Mute Speech Narration (M)'}
-              aria-label="Toggle Speech Narration"
+        {/* Right Side: Voice Selector, Audio Toggle, Captions & Speed */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Prebuilt Voice Selection Dropdown */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] uppercase font-bold text-slate-400 hidden lg:inline">Voice:</span>
+            <select
+              value={selectedVoice}
+              onChange={(e) => setSelectedVoice(e.target.value as VoiceName)}
+              className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-decodeai-primary font-medium cursor-pointer"
+              title="Select Gemini Prebuilt Voice"
+              aria-label="Select Voice"
             >
-              {!isMuted ? (
-                <>
-                  <svg className="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                  </svg>
-                  <span className="hidden sm:inline">Voice ON</span>
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-                  </svg>
-                  <span className="hidden sm:inline">Voice Muted</span>
-                </>
-              )}
-            </button>
-
-            {/* Browser Speech Synthesis Disclaimer Tooltip */}
-            <div className="opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none absolute bottom-9 right-0 w-64 p-2 rounded-lg bg-slate-900 border border-slate-700 text-[10px] text-slate-300 shadow-xl z-30">
-              <span className="font-semibold text-cyan-400">Web Speech Synthesis:</span> Voice narration uses the browser engine and is approximated to caption segments, not live word-synced audio.
-            </div>
+              {PREBUILT_VOICES.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.label}
+                </option>
+              ))}
+            </select>
           </div>
+
+          {/* Voice Narration Audio Toggle */}
+          <button
+            onClick={() => {
+              if (captionOnlyFallback) {
+                setCaptionOnlyFallback(false);
+                setNarrationEnabled(true);
+              } else if (!narrationEnabled) {
+                setNarrationEnabled(true);
+              } else {
+                toggleMute();
+              }
+            }}
+            className={`p-1.5 rounded-lg text-xs font-medium border transition-colors flex items-center gap-1.5 ${
+              captionOnlyFallback || !narrationEnabled
+                ? 'bg-amber-950/40 border-amber-800/50 text-amber-300'
+                : !isMuted
+                ? 'bg-indigo-950/60 border-indigo-700/60 text-indigo-300 hover:bg-indigo-900/60'
+                : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
+            }`}
+            title={
+              captionOnlyFallback
+                ? 'Caption-Only Mode (Click to re-enable audio)'
+                : !narrationEnabled
+                ? 'Narration Disabled'
+                : isMuted
+                ? 'Unmute Speech Narration (M)'
+                : 'Mute Speech Narration (M)'
+            }
+            aria-label="Toggle Speech Narration"
+          >
+            {captionOnlyFallback || !narrationEnabled ? (
+              <>
+                <span>💬</span>
+                <span className="hidden sm:inline">Caption Only</span>
+              </>
+            ) : !isMuted ? (
+              <>
+                <svg className="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                </svg>
+                <span className="hidden sm:inline">{selectedVoice} ON</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                </svg>
+                <span className="hidden sm:inline">Muted</span>
+              </>
+            )}
+          </button>
 
           {/* Captions Toggle (CC) */}
           <button

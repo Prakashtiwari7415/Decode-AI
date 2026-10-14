@@ -9,6 +9,10 @@ export const PlayerViewport: React.FC = () => {
     activeChapterIndex,
     activeSceneIndex,
     isPlaying,
+    selectedVoice,
+    narrationEnabled,
+    audioLoading,
+    captionOnlyFallback,
     getCurrentScene,
     togglePlay,
   } = useLessonStore();
@@ -54,8 +58,8 @@ export const PlayerViewport: React.FC = () => {
           </span>
         </div>
 
-        {/* Status Pills: Fixture vs AI Badge, Uncertainty Badge & Playback State */}
-        <div className="flex items-center gap-2 pointer-events-auto">
+        {/* Status Pills: Fixture vs AI Badge, Audio Mode, Uncertainty Badge & Playback State */}
+        <div className="flex items-center gap-2 pointer-events-auto flex-wrap justify-end">
           {lesson.lesson_id.includes('fixture') ? (
             <span className="px-2 py-0.5 rounded-full bg-slate-800/90 border border-slate-700 text-slate-300 text-[10px] font-mono font-semibold flex items-center gap-1">
               <span>📌</span> Fixture Demo
@@ -63,6 +67,22 @@ export const PlayerViewport: React.FC = () => {
           ) : (
             <span className="px-2 py-0.5 rounded-full bg-indigo-950/80 border border-indigo-600/50 text-indigo-300 text-[10px] font-mono font-semibold flex items-center gap-1">
               <span>✨</span> {lesson.gemini_model_version || 'Gemini 3.8 Flash'}
+            </span>
+          )}
+
+          {/* Voice Narration Mode Pill */}
+          {audioLoading ? (
+            <span className="px-2 py-0.5 rounded-full bg-indigo-900/50 border border-indigo-500/50 text-cyan-300 text-[10px] font-mono font-semibold flex items-center gap-1.5 animate-pulse">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+              Generating Voice...
+            </span>
+          ) : captionOnlyFallback || !narrationEnabled ? (
+            <span className="px-2 py-0.5 rounded-full bg-amber-950/60 border border-amber-800/60 text-amber-300 text-[10px] font-mono font-semibold flex items-center gap-1">
+              <span>💬</span> Caption Only
+            </span>
+          ) : (
+            <span className="px-2 py-0.5 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 text-[10px] font-mono font-semibold flex items-center gap-1">
+              <span>🎙️</span> {selectedVoice}
             </span>
           )}
 

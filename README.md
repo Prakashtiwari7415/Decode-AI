@@ -35,6 +35,17 @@ DecodeAI transforms complex AI-generated code snippets, diffs, terminal outputs,
 - Explicit Fixture Mode toggle (`use_fixture: true`) allowing offline deterministic testing without an external API key.
 - Dynamic frontend feedback with 3-stage loading progress bar, 20,000 character limit enforcement, and 1-click retry.
 
+### Milestone 3: Generated Narration & Scene-Level Audio Synchronization
+- **Backend Gemini TTS**: Integrated official Google Gen AI Python SDK using `gemini-3.8-flash-tts` (`GEMINI_TTS_MODEL`), generating natural spoken narration for each scene.
+- **Multilingual Pronunciation**: Supports English (`en`), Hindi (`hi`), and Hinglish (`hinglish`) with prompt framing that preserves natural technical English terms in mixed sentences.
+- **Prebuilt Voice Selection**: Configurable voices (`Puck`, `Charon`, `Kore`, `Fenrir`, `Aoede`).
+- **Format Normalization**: Standardizes raw PCM (`audio/pcm;rate=24000`) into standard RIFF/WAV audio with headers readable by any web browser.
+- **Offline Fixture Tone Generation**: Mathematical synthetic WAV audio generator for fixture lessons, allowing full offline testing without API keys or network requests.
+- **Audio API**: Dedicated `POST /api/audio/narrate` returning WAV bytes (`audio/wav`) with metadata headers (`X-Narration-Voice`, `X-Narration-Language`) and RFC 9457 error mappings.
+- **Master Reference Clock Synchronization**: Visual animations and subtitles are driven directly by `audio.currentTime * 1000`, eliminating timer drift between animation and narration. Decoded audio duration updates the timeline dynamically.
+- **In-Memory Session Cache**: Audio blobs and object URLs are cached in-memory during the user session, avoiding redundant network requests. URLs are automatically revoked on cleanup.
+- **Resilient Fallback Mode**: Gracefully transitions to a clearly labeled **Caption-Only Mode** if quotas or provider errors occur, allowing users to continue the lesson uninterrupted.
+
 ---
 
 ## Prerequisites
@@ -93,7 +104,7 @@ The frontend app will be running at [http://localhost:5173](http://localhost:517
 
 ## Testing & Quality Verification
 
-### Backend Suite (25 Tests)
+### Backend Suite (44 Tests)
 ```bash
 cd backend
 uv run pytest -v           # Run full pytest suite (unit + integration)
@@ -102,12 +113,12 @@ uv run ruff format --check # Format check
 uv run mypy app            # Strict type check
 ```
 
-### Frontend Suite (17 Tests)
+### Frontend Suite (28 Tests)
 ```bash
 cd frontend
 npm run typecheck          # TypeScript strict validation
 npm run lint               # ESLint check
-npx vitest run             # Vitest test suite
+npx vitest run             # Vitest test suite (4 suites, 28 tests)
 npm run build              # Production bundle verification
 ```
 

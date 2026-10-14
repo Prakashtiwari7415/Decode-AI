@@ -156,4 +156,51 @@ describe('useLessonStore', () => {
     store.toggleVerificationItem('v1');
     expect(useLessonStore.getState().checkedVerificationIds['v1']).toBe(false);
   });
+
+  it('manages Milestone 3 audio narration state and voice selection', () => {
+    const store = useLessonStore.getState();
+
+    // Default voice is Puck and narration is enabled
+    expect(store.selectedVoice).toBe('Puck');
+    expect(store.narrationEnabled).toBe(true);
+    expect(store.audioLoading).toBe(false);
+    expect(store.audioError).toBeNull();
+    expect(store.captionOnlyFallback).toBe(false);
+
+    // Set voice
+    store.setSelectedVoice('Fenrir');
+    expect(useLessonStore.getState().selectedVoice).toBe('Fenrir');
+
+    // Toggle narration
+    store.toggleNarration();
+    expect(useLessonStore.getState().narrationEnabled).toBe(false);
+    store.toggleNarration();
+    expect(useLessonStore.getState().narrationEnabled).toBe(true);
+
+    // Audio loading and error
+    store.setAudioLoading(true);
+    expect(useLessonStore.getState().audioLoading).toBe(true);
+    store.setAudioError('Quota exceeded');
+    expect(useLessonStore.getState().audioError).toBe('Quota exceeded');
+
+    // Caption-only fallback
+    store.setCaptionOnlyFallback(true);
+    expect(useLessonStore.getState().captionOnlyFallback).toBe(true);
+
+    // Active scene duration
+    store.setActiveSceneDurationMs(8500);
+    expect(useLessonStore.getState().activeSceneDurationMs).toBe(8500);
+
+    // Reset clears state
+    store.reset();
+    const resetState = useLessonStore.getState();
+    expect(resetState.lesson).toBeNull();
+    expect(resetState.activeChapterIndex).toBe(0);
+    expect(resetState.activeSceneIndex).toBe(0);
+    expect(resetState.isPlaying).toBe(false);
+    expect(resetState.audioLoading).toBe(false);
+    expect(resetState.audioError).toBeNull();
+    expect(resetState.captionOnlyFallback).toBe(false);
+    expect(resetState.activeSceneDurationMs).toBeNull();
+  });
 });

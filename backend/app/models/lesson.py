@@ -73,7 +73,7 @@ class Caption(BaseModel):
     offset_ms: int = Field(
         default=0, ge=0, description="Start offset from beginning of scene audio in ms"
     )
-    duration_ms: int = Field(default=4000, gt=0, description="Display duration of caption in ms")
+    duration_ms: int = Field(default=4000, ge=100, description="Display duration of caption in ms")
     text: str = Field(..., min_length=1, description="Subtitle line text")
 
     @field_validator("offset_ms", mode="before")

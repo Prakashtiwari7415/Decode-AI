@@ -7,6 +7,8 @@ export type DetailLevel = 'brief' | 'standard' | 'deep';
 export type VerificationImportance = 'must-know' | 'nice-to-know' | 'caution';
 export type AnimationStyle = 'fade-slide' | 'typewriter' | 'highlight-sweep';
 
+export type VoiceName = 'Puck' | 'Charon' | 'Kore' | 'Fenrir' | 'Aoede';
+
 // Request
 export interface LessonRequest {
   content: string;
@@ -14,6 +16,13 @@ export interface LessonRequest {
   language: Language;
   detail_level: DetailLevel;
   use_fixture?: boolean;
+}
+
+export interface NarrationAudioRequest {
+  text: string;
+  language: Language;
+  voice?: VoiceName;
+  is_fixture?: boolean;
 }
 
 // Response models

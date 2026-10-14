@@ -114,6 +114,68 @@ describe('Player Components', () => {
     expect(useLessonStore.getState().isPlaying).toBe(true);
   });
 
+  it('renders voice selector dropdown in PlayerControls and updates selected voice', () => {
+    render(<PlayerControls />);
+
+    const voiceSelect = screen.getByRole('combobox', { name: 'Select Voice' });
+    expect(voiceSelect).toBeInTheDocument();
+    expect(voiceSelect).toHaveValue('Puck');
+
+    // Change to Fenrir
+    fireEvent.change(voiceSelect, { target: { value: 'Fenrir' } });
+    expect(useLessonStore.getState().selectedVoice).toBe('Fenrir');
+  });
+
+  it('toggles speech narration mute state via PlayerControls', () => {
+    render(<PlayerControls />);
+
+    const narrationBtn = screen.getByRole('button', { name: 'Toggle Speech Narration' });
+    expect(narrationBtn).toBeInTheDocument();
+
+    // Currently not muted -> click mutes
+    fireEvent.click(narrationBtn);
+    expect(useLessonStore.getState().isMuted).toBe(true);
+
+    // Click again unmutes
+    fireEvent.click(narrationBtn);
+    expect(useLessonStore.getState().isMuted).toBe(false);
+  });
+
+  it('renders audio loading and error banners in PlayerControls', () => {
+    // 1. Audio Loading banner
+    useLessonStore.getState().setAudioLoading(true);
+    const { rerender } = render(<PlayerControls />);
+    expect(screen.getByText(/Synthesizing scene audio with Gemini TTS/i)).toBeInTheDocument();
+
+    // 2. Audio Error banner
+    useLessonStore.getState().setAudioLoading(false);
+    useLessonStore.getState().setAudioError('TTS provider error 502');
+    rerender(<PlayerControls />);
+    expect(screen.getByText(/TTS provider error 502/i)).toBeInTheDocument();
+
+    // Click caption-only mode button on error banner
+    const captionOnlyBtn = screen.getByRole('button', { name: 'Caption-Only Mode' });
+    fireEvent.click(captionOnlyBtn);
+    expect(useLessonStore.getState().captionOnlyFallback).toBe(true);
+  });
+
+  it('renders voice status pill, loading pill, and caption-only pill in PlayerViewport', () => {
+    // Default: voice pill
+    const { rerender } = render(<PlayerViewport />);
+    expect(screen.getByText(/🎙️/)).toBeInTheDocument();
+
+    // Audio loading pill
+    useLessonStore.getState().setAudioLoading(true);
+    rerender(<PlayerViewport />);
+    expect(screen.getByText(/Generating Voice.../i)).toBeInTheDocument();
+
+    // Caption only fallback pill
+    useLessonStore.getState().setAudioLoading(false);
+    useLessonStore.getState().setCaptionOnlyFallback(true);
+    rerender(<PlayerViewport />);
+    expect(screen.getByText(/Caption Only/i)).toBeInTheDocument();
+  });
+
   it('renders ArchitectureScene with all system pipeline nodes and labels', () => {
     const visual = mockLesson.chapters[1].scenes[0].visual;
     render(<ArchitectureScene visual={visual} title="System Execution Pipeline" />);

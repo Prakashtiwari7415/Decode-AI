@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Lesson, Chapter, Scene } from '../types/lesson';
+import { Lesson, Chapter, Scene, VoiceName } from '../types/lesson';
 
 export interface LessonState {
   lesson: Lesson | null;
@@ -14,6 +14,14 @@ export interface LessonState {
   activeHighlightTerm: string | null;
   checkedVerificationIds: Record<string, boolean>;
 
+  // Milestone 3 Audio & Narration State
+  selectedVoice: VoiceName;
+  narrationEnabled: boolean;
+  audioLoading: boolean;
+  audioError: string | null;
+  captionOnlyFallback: boolean;
+  activeSceneDurationMs: number | null;
+
   // Computed helper methods
   getCurrentChapter: () => Chapter | null;
   getCurrentScene: () => Scene | null;
@@ -21,7 +29,7 @@ export interface LessonState {
   getGlobalSceneIndex: () => number;
 
   // Actions
-  setLesson: (lesson: Lesson) => void;
+  setLesson: (lesson: Lesson | null) => void;
   play: () => void;
   pause: () => void;
   togglePlay: () => void;
@@ -37,7 +45,26 @@ export interface LessonState {
   setCurrentCaptionText: (text: string) => void;
   setActiveHighlightTerm: (term: string | null) => void;
   toggleVerificationItem: (id: string) => void;
+
+  // Milestone 3 Audio Actions
+  setSelectedVoice: (voice: VoiceName) => void;
+  setNarrationEnabled: (enabled: boolean) => void;
+  toggleNarration: () => void;
+  setAudioLoading: (loading: boolean) => void;
+  setAudioError: (error: string | null) => void;
+  setCaptionOnlyFallback: (fallback: boolean) => void;
+  setActiveSceneDurationMs: (ms: number | null) => void;
+  reset: () => void;
 }
+
+const initialAudioState = {
+  selectedVoice: 'Puck' as VoiceName,
+  narrationEnabled: true,
+  audioLoading: false,
+  audioError: null,
+  captionOnlyFallback: false,
+  activeSceneDurationMs: null,
+};
 
 export const useLessonStore = create<LessonState>((set, get) => ({
   lesson: null,
@@ -51,6 +78,7 @@ export const useLessonStore = create<LessonState>((set, get) => ({
   currentCaptionText: '',
   activeHighlightTerm: null,
   checkedVerificationIds: {},
+  ...initialAudioState,
 
   getCurrentChapter: () => {
     const { lesson, activeChapterIndex } = get();
@@ -81,7 +109,7 @@ export const useLessonStore = create<LessonState>((set, get) => ({
     return count + activeSceneIndex;
   },
 
-  setLesson: (lesson: Lesson) => {
+  setLesson: (lesson: Lesson | null) => {
     set({
       lesson,
       activeChapterIndex: 0,
@@ -91,6 +119,7 @@ export const useLessonStore = create<LessonState>((set, get) => ({
       currentCaptionText: '',
       activeHighlightTerm: null,
       checkedVerificationIds: {},
+      ...initialAudioState,
     });
   },
 
@@ -106,6 +135,8 @@ export const useLessonStore = create<LessonState>((set, get) => ({
       activeSceneIndex: 0,
       sceneElapsedMs: 0,
       currentCaptionText: '',
+      activeSceneDurationMs: null,
+      audioError: null,
       isPlaying: true,
     });
   },
@@ -120,6 +151,8 @@ export const useLessonStore = create<LessonState>((set, get) => ({
         activeSceneIndex: activeSceneIndex + 1,
         sceneElapsedMs: 0,
         currentCaptionText: '',
+        activeSceneDurationMs: null,
+        audioError: null,
       });
       return true;
     }
@@ -130,12 +163,14 @@ export const useLessonStore = create<LessonState>((set, get) => ({
         activeSceneIndex: 0,
         sceneElapsedMs: 0,
         currentCaptionText: '',
+        activeSceneDurationMs: null,
+        audioError: null,
       });
       return true;
     }
 
     // Reached the end of the lesson
-    set({ isPlaying: false });
+    set({ isPlaying: false, sceneElapsedMs: 0 });
     return false;
   },
 
@@ -148,6 +183,8 @@ export const useLessonStore = create<LessonState>((set, get) => ({
         activeSceneIndex: activeSceneIndex - 1,
         sceneElapsedMs: 0,
         currentCaptionText: '',
+        activeSceneDurationMs: null,
+        audioError: null,
       });
       return true;
     }
@@ -159,6 +196,8 @@ export const useLessonStore = create<LessonState>((set, get) => ({
         activeSceneIndex: prevChapter.scenes.length - 1,
         sceneElapsedMs: 0,
         currentCaptionText: '',
+        activeSceneDurationMs: null,
+        audioError: null,
       });
       return true;
     }
@@ -174,6 +213,8 @@ export const useLessonStore = create<LessonState>((set, get) => ({
       activeSceneIndex: 0,
       sceneElapsedMs: 0,
       currentCaptionText: '',
+      activeSceneDurationMs: null,
+      audioError: null,
     });
   },
 
@@ -188,6 +229,8 @@ export const useLessonStore = create<LessonState>((set, get) => ({
       activeSceneIndex: sceneIndex,
       sceneElapsedMs: 0,
       currentCaptionText: '',
+      activeSceneDurationMs: null,
+      audioError: null,
     });
   },
 
@@ -210,4 +253,36 @@ export const useLessonStore = create<LessonState>((set, get) => ({
         [id]: !state.checkedVerificationIds[id],
       },
     })),
+
+  // Milestone 3 Audio Actions
+  setSelectedVoice: (selectedVoice: VoiceName) => set({ selectedVoice }),
+
+  setNarrationEnabled: (narrationEnabled: boolean) => set({ narrationEnabled }),
+
+  toggleNarration: () => set((state) => ({ narrationEnabled: !state.narrationEnabled })),
+
+  setAudioLoading: (audioLoading: boolean) => set({ audioLoading }),
+
+  setAudioError: (audioError: string | null) => set({ audioError }),
+
+  setCaptionOnlyFallback: (captionOnlyFallback: boolean) => set({ captionOnlyFallback }),
+
+  setActiveSceneDurationMs: (activeSceneDurationMs: number | null) =>
+    set({ activeSceneDurationMs }),
+
+  reset: () =>
+    set({
+      lesson: null,
+      activeChapterIndex: 0,
+      activeSceneIndex: 0,
+      isPlaying: false,
+      playbackSpeed: 1,
+      isMuted: false,
+      captionsEnabled: true,
+      sceneElapsedMs: 0,
+      currentCaptionText: '',
+      activeHighlightTerm: null,
+      checkedVerificationIds: {},
+      ...initialAudioState,
+    }),
 }));
