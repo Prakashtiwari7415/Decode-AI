@@ -37,7 +37,8 @@ class Settings(BaseSettings):
         Raises:
             ValueError: If GEMINI_API_KEY is not set or empty.
         """
-        if not self.gemini_api_key or not self.gemini_api_key.strip():
+        is_placeholder = self.gemini_api_key.startswith("dev-placeholder")
+        if not self.gemini_api_key or (not is_placeholder and not self.gemini_api_key.strip()):
             raise ValueError("GEMINI_API_KEY environment variable is required and cannot be empty.")
 
 
