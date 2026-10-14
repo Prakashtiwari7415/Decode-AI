@@ -1,7 +1,9 @@
 """Health check router reporting backend status and active environment."""
 
 from typing import Any
+
 from fastapi import APIRouter
+
 from app.config import get_settings
 
 router = APIRouter(tags=["Health"])

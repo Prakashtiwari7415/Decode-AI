@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 from typing import Any
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -13,7 +14,8 @@ class Settings(BaseSettings):
     environment: str = "development"
     allowed_origins: list[str] = ["http://localhost:5173"]
     rate_limit_per_minute: int = 10
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-3.8-flash"
+    gemini_timeout_seconds: float = 30.0
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -33,7 +35,7 @@ class Settings(BaseSettings):
 
     def validate_runtime(self) -> None:
         """Validate startup preconditions.
-        
+
         Raises:
             ValueError: If GEMINI_API_KEY is not set or empty.
         """

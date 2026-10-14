@@ -54,8 +54,18 @@ export const PlayerViewport: React.FC = () => {
           </span>
         </div>
 
-        {/* Status Pills: Uncertainty Badge & Playback State */}
+        {/* Status Pills: Fixture vs AI Badge, Uncertainty Badge & Playback State */}
         <div className="flex items-center gap-2 pointer-events-auto">
+          {lesson.lesson_id.includes('fixture') ? (
+            <span className="px-2 py-0.5 rounded-full bg-slate-800/90 border border-slate-700 text-slate-300 text-[10px] font-mono font-semibold flex items-center gap-1">
+              <span>📌</span> Fixture Demo
+            </span>
+          ) : (
+            <span className="px-2 py-0.5 rounded-full bg-indigo-950/80 border border-indigo-600/50 text-indigo-300 text-[10px] font-mono font-semibold flex items-center gap-1">
+              <span>✨</span> {lesson.gemini_model_version || 'Gemini 3.8 Flash'}
+            </span>
+          )}
+
           {scene.uncertainty !== 'none' && (
             <div className="relative group/uncertainty">
               <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-bold flex items-center gap-1 cursor-help">

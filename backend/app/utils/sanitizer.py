@@ -9,7 +9,7 @@ FORBIDDEN_PATTERNS: tuple[str, ...] = (
 
 def sanitize_content(content: str) -> str:
     """Sanitize input content against injection attacks and malformed bytes.
-    
+
     Processing steps:
     1. Removes null bytes (`\x00`).
     2. Strips leading and trailing whitespace.

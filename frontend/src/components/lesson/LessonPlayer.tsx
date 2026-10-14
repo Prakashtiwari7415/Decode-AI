@@ -97,6 +97,18 @@ export const LessonPlayer: React.FC<LessonPlayerProps> = ({ onBackToInput }) => 
             <span className="text-slate-300">
               {Math.round(lesson.total_estimated_duration_ms / 1000)}s runtime
             </span>
+            <span>•</span>
+            <span
+              className={
+                lesson.lesson_id.includes('fixture')
+                  ? 'text-slate-400 font-mono'
+                  : 'text-indigo-400 font-semibold font-mono'
+              }
+            >
+              {lesson.lesson_id.includes('fixture')
+                ? '📌 Predefined Fixture'
+                : `✨ ${lesson.gemini_model_version}`}
+            </span>
           </div>
         </div>
 

@@ -2,8 +2,10 @@
 
 from fastapi import APIRouter, Request, status
 from fastapi.responses import JSONResponse
+
 from app.models.lesson import Lesson
 from app.models.request import LessonRequest
+from app.services.gemini_client import GeminiError
 from app.services.lesson_builder import LessonBuilder
 from app.utils.sanitizer import sanitize_content
 
@@ -25,6 +27,21 @@ def rfc9457_value_error_response(request: Request, exc: ValueError) -> JSONRespo
     )
 
 
+def rfc9457_gemini_error_response(request: Request, exc: GeminiError) -> JSONResponse:
+    """Format Gemini provider exceptions into RFC 9457 Problem Details JSON responses."""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "type": "about:blank",
+            "title": "AI Provider Error",
+            "status": exc.status_code,
+            "detail": exc.detail,
+            "instance": str(request.url.path),
+        },
+        media_type="application/problem+json",
+    )
+
+
 @router.post(
     "/lessons/generate",
     response_model=Lesson,
@@ -32,7 +49,11 @@ def rfc9457_value_error_response(request: Request, exc: ValueError) -> JSONRespo
     responses={
         200: {"description": "Successfully synthesized Lesson model."},
         400: {"description": "Invalid content or prohibited injection pattern (RFC 9457)."},
+        401: {"description": "Missing or unauthorized Gemini API key."},
         422: {"description": "Unprocessable entity / schema validation failure."},
+        429: {"description": "Gemini rate limit or quota exceeded."},
+        502: {"description": "Gemini provider or upstream service error."},
+        504: {"description": "Generation timeout."},
     },
 )
 async def generate_lesson(payload: LessonRequest, request: Request) -> Lesson | JSONResponse:
@@ -50,8 +71,10 @@ async def generate_lesson(payload: LessonRequest, request: Request) -> Lesson | 
         cleaned_content = sanitize_content(payload.content)
         payload.content = cleaned_content
 
-        # Build and return the Lesson (uses fixture in Milestone 1)
+        # Build and return the Lesson (invokes Gemini or returns fixture if use_fixture=True)
         builder = LessonBuilder()
-        return builder.build(payload)
+        return await builder.build(payload)
     except ValueError as exc:
         return rfc9457_value_error_response(request, exc)
+    except GeminiError as exc:
+        return rfc9457_gemini_error_response(request, exc)

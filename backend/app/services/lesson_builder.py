@@ -1,6 +1,9 @@
-"""Service for building structured lessons and fixtures."""
+from datetime import UTC, datetime
+from pathlib import Path
 
-from datetime import datetime, timezone
+from jinja2 import Environment, FileSystemLoader
+
+from app.config import get_settings
 from app.models.common import (
     AnimationStyle,
     Language,
@@ -18,15 +21,30 @@ from app.models.lesson import (
     VisualSpec,
 )
 from app.models.request import LessonRequest
+from app.services.gemini_client import GeminiClient
 from app.utils.language import estimate_duration_ms
+
+PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
+jinja_env = Environment(loader=FileSystemLoader(PROMPTS_DIR), autoescape=False)
 
 
 class LessonBuilder:
     """Orchestrates lesson generation from prompts or provides deterministic fixtures."""
 
+    def __init__(self, gemini_client: GeminiClient | None = None) -> None:
+        if gemini_client is not None:
+            self.gemini_client = gemini_client
+        else:
+            settings = get_settings()
+            self.gemini_client = GeminiClient(
+                api_key=settings.gemini_api_key,
+                model=settings.gemini_model,
+                timeout_seconds=settings.gemini_timeout_seconds,
+            )
+
     def build_fixture(self, request: LessonRequest) -> Lesson:
         """Construct a complete, valid Lesson fixture tailored to the requested language.
-        
+
         The fixture consists of:
         - 1 Chapter
         - 2 Scenes (one `text` scene and one `code_diff` scene)
@@ -154,8 +172,16 @@ class LessonBuilder:
                 animation_style=AnimationStyle.FADE_SLIDE,
             ),
             captions=[
-                Caption(offset_ms=0, duration_ms=s1_mid, text=scene1_narration[:len(scene1_narration)//2].strip()),
-                Caption(offset_ms=s1_mid, duration_ms=scene1_duration - s1_mid, text=scene1_narration[len(scene1_narration)//2:].strip()),
+                Caption(
+                    offset_ms=0,
+                    duration_ms=s1_mid,
+                    text=scene1_narration[: len(scene1_narration) // 2].strip(),
+                ),
+                Caption(
+                    offset_ms=s1_mid,
+                    duration_ms=scene1_duration - s1_mid,
+                    text=scene1_narration[len(scene1_narration) // 2 :].strip(),
+                ),
             ],
             uncertainty=UncertaintyLevel.NONE,
             uncertainty_note=None,
@@ -175,8 +201,16 @@ class LessonBuilder:
                 animation_style=AnimationStyle.HIGHLIGHT_SWEEP,
             ),
             captions=[
-                Caption(offset_ms=0, duration_ms=s2_mid, text=scene2_narration[:len(scene2_narration)//2].strip()),
-                Caption(offset_ms=s2_mid, duration_ms=scene2_duration - s2_mid, text=scene2_narration[len(scene2_narration)//2:].strip()),
+                Caption(
+                    offset_ms=0,
+                    duration_ms=s2_mid,
+                    text=scene2_narration[: len(scene2_narration) // 2].strip(),
+                ),
+                Caption(
+                    offset_ms=s2_mid,
+                    duration_ms=scene2_duration - s2_mid,
+                    text=scene2_narration[len(scene2_narration) // 2 :].strip(),
+                ),
             ],
             uncertainty=UncertaintyLevel.NONE,
             uncertainty_note=None,
@@ -192,7 +226,9 @@ class LessonBuilder:
         # Chapter 2: System Architecture & Execution Pipeline
         if lang == Language.HI:
             chap2_title = "सिस्टम आर्किटेक्चर और निष्पादन प्रवाह"
-            chap2_summary = "क्लाइंट, एपीआई गेटवे, पायथन बाइटकोड इंजन और मेमोरी एलोकेशन के बीच डेटा प्रवाह को समझें।"
+            chap2_summary = (
+                "क्लाइंट, एपीआई गेटवे, पायथन बाइटकोड इंजन और मेमोरी एलोकेशन के बीच डेटा प्रवाह को समझें।"
+            )
             scene3_title = "पायथन कॉम्प्रिहेंशन आर्किटेक्चर पाइपलाइन"
             scene3_narration = "यूज़र क्लाइंट से अनुरोध भेजता है। बैकएंड पार्सर इसे वैलिडेट करता है और पायथन वर्चुअल मशीन बाइटकोड को सीधे मेमोरी में निष्पादित करती है।"
             scene4_title = "बेंचमार्क और परफॉरमेंस सत्यापन"
@@ -223,13 +259,31 @@ class LessonBuilder:
             visual=VisualSpec(
                 scene_type=SceneType.DIAGRAM,
                 mermaid_definition="graph LR\n  User[User Client] --> Frontend[Frontend React]\n  Frontend --> API[API Gateway / FastAPI]\n  API --> Engine[Python Bytecode Engine]\n  Engine --> Memory[(Pre-sized Memory Store)]",
-                highlighted_terms=["User Client", "Frontend React", "API Gateway", "Python Bytecode Engine", "Memory Store"],
+                highlighted_terms=[
+                    "User Client",
+                    "Frontend React",
+                    "API Gateway",
+                    "Python Bytecode Engine",
+                    "Memory Store",
+                ],
                 animation_style=AnimationStyle.FADE_SLIDE,
             ),
             captions=[
-                Caption(offset_ms=0, duration_ms=s3_third, text="1. Client initiates request to API Gateway"),
-                Caption(offset_ms=s3_third, duration_ms=s3_third, text="2. Backend validates & compiles AST into optimized Bytecode"),
-                Caption(offset_ms=s3_third * 2, duration_ms=scene3_duration - (s3_third * 2), text="3. Memory buffer pre-allocated and response streamed back"),
+                Caption(
+                    offset_ms=0,
+                    duration_ms=s3_third,
+                    text="1. Client initiates request to API Gateway",
+                ),
+                Caption(
+                    offset_ms=s3_third,
+                    duration_ms=s3_third,
+                    text="2. Backend validates & compiles AST into optimized Bytecode",
+                ),
+                Caption(
+                    offset_ms=s3_third * 2,
+                    duration_ms=scene3_duration - (s3_third * 2),
+                    text="3. Memory buffer pre-allocated and response streamed back",
+                ),
             ],
             uncertainty=UncertaintyLevel.NONE,
             uncertainty_note=None,
@@ -249,8 +303,16 @@ class LessonBuilder:
                 animation_style=AnimationStyle.TYPEWRITER,
             ),
             captions=[
-                Caption(offset_ms=0, duration_ms=s4_mid, text=scene4_narration[:len(scene4_narration)//2].strip()),
-                Caption(offset_ms=s4_mid, duration_ms=scene4_duration - s4_mid, text=scene4_narration[len(scene4_narration)//2:].strip()),
+                Caption(
+                    offset_ms=0,
+                    duration_ms=s4_mid,
+                    text=scene4_narration[: len(scene4_narration) // 2].strip(),
+                ),
+                Caption(
+                    offset_ms=s4_mid,
+                    duration_ms=scene4_duration - s4_mid,
+                    text=scene4_narration[len(scene4_narration) // 2 :].strip(),
+                ),
             ],
             uncertainty=UncertaintyLevel.LOW,
             uncertainty_note="Performance gain depends on Python runtime version (3.11+ specializing adaptive interpreter).",
@@ -274,15 +336,12 @@ class LessonBuilder:
             chapters=[chapter1, chapter2],
             glossary=glossary,
             verification_checklist=verification,
-            gemini_model_version="gemini-2.5-flash",
-            generated_at=datetime.now(timezone.utc).isoformat(),
+            gemini_model_version="gemini-3.8-flash",
+            generated_at=datetime.now(UTC).isoformat(),
         )
 
-    def build(self, request: LessonRequest) -> Lesson:
-        """Generate a lesson based on request parameters.
-        
-        Milestone 1 uses build_fixture() to return a deterministic, complete Lesson.
-        Milestone 2 will route this to GeminiClient for dynamic generation.
+    async def build(self, request: LessonRequest) -> Lesson:
+        """Generate a lesson based on request parameters using Gemini or predefined fixture.
 
         Args:
             request: The validated lesson request payload.
@@ -290,4 +349,15 @@ class LessonBuilder:
         Returns:
             Constructed Lesson model.
         """
-        return self.build_fixture(request)
+        if request.use_fixture:
+            return self.build_fixture(request)
+
+        template = jinja_env.get_template("lesson_prompt.j2")
+        rendered_prompt = template.render(
+            content=request.content,
+            content_type=request.content_type.value,
+            language=request.language.value,
+            detail_level=request.detail_level.value,
+        )
+
+        return await self.gemini_client.generate_lesson(rendered_prompt)

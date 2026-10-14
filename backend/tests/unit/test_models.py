@@ -2,6 +2,7 @@
 
 import pytest
 from pydantic import ValidationError
+
 from app.models.common import ContentType, DetailLevel, Language
 from app.models.lesson import Lesson
 from app.models.request import LessonRequest

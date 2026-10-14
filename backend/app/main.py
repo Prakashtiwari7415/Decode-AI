@@ -2,11 +2,12 @@
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+
 from app.config import get_settings
 from app.routers.health import router as health_router
 from app.routers.lesson import router as lesson_router
@@ -71,7 +72,10 @@ def create_app() -> FastAPI:
         # Check if validation failed due to injection security patterns
         for err in errors:
             msg = str(err.get("msg", "")).lower()
-            if any(forbidden in msg for forbidden in ("prohibited pattern", "<script", "javascript:", "data:text/html")):
+            if any(
+                forbidden in msg
+                for forbidden in ("prohibited pattern", "<script", "javascript:", "data:text/html")
+            ):
                 return JSONResponse(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     content={

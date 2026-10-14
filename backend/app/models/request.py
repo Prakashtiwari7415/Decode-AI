@@ -1,6 +1,7 @@
 """Request schemas for lesson generation API endpoints."""
 
 from pydantic import BaseModel, Field, field_validator
+
 from app.models.common import ContentType, DetailLevel, Language
 from app.utils.sanitizer import sanitize_content
 
@@ -11,7 +12,8 @@ class LessonRequest(BaseModel):
     content: str = Field(
         ...,
         min_length=10,
-        description="Source code, diff, prompt, or terminal log to explain (minimum 10 characters)",
+        max_length=20_000,
+        description="Source code, diff, prompt, or terminal log to explain (10 - 20,000 characters)",
     )
     content_type: ContentType = Field(
         default=ContentType.EXPLANATION,
@@ -25,6 +27,10 @@ class LessonRequest(BaseModel):
         default=DetailLevel.STANDARD,
         description="Desired educational depth",
     )
+    use_fixture: bool = Field(
+        default=False,
+        description="If True, returns deterministic fixture without querying live AI providers",
+    )
 
     @field_validator("content")
     @classmethod
@@ -36,5 +42,7 @@ class LessonRequest(BaseModel):
         cleaned = sanitize_content(value)
         if len(cleaned) < 10:
             raise ValueError("Content must be at least 10 characters long.")
+        if len(cleaned) > 20_000:
+            raise ValueError("Content exceeds maximum allowed limit of 20,000 characters.")
 
         return cleaned

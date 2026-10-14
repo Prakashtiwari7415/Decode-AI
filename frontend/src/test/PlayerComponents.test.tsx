@@ -86,12 +86,22 @@ describe('Player Components', () => {
     useLessonStore.getState().setLesson(mockLesson);
   });
 
-  it('renders PlayerViewport with chapter title and scene badges', () => {
+  it('renders PlayerViewport with chapter title, scene badges, and model version badge', () => {
     render(<PlayerViewport />);
 
     expect(screen.getByText(/Fundamentals & Syntax/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Loop to Comprehension/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/PAUSED/i)).toBeInTheDocument();
+    expect(screen.getByText(/gemini-2.5-flash/i)).toBeInTheDocument();
+  });
+
+  it('renders Fixture Demo badge when lesson is an offline fixture', () => {
+    useLessonStore.getState().setLesson({
+      ...mockLesson,
+      lesson_id: 'lesson-fixture-en',
+    });
+    render(<PlayerViewport />);
+    expect(screen.getByText(/Fixture Demo/i)).toBeInTheDocument();
   });
 
   it('renders PlayerControls with accessible buttons and allows play/pause toggle', () => {

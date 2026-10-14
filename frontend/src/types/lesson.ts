@@ -13,6 +13,7 @@ export interface LessonRequest {
   content_type: ContentType;
   language: Language;
   detail_level: DetailLevel;
+  use_fixture?: boolean;
 }
 
 // Response models

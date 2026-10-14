@@ -12,7 +12,7 @@ WPM_BY_LANGUAGE: dict[Language, int] = {
 
 def estimate_duration_ms(text: str, language: Language) -> int:
     """Estimate narration duration in milliseconds from word count and language WPM.
-    
+
     Args:
         text: Narration transcript text.
         language: Language enumeration (EN=130 WPM, HI=110 WPM, HINGLISH=120 WPM).

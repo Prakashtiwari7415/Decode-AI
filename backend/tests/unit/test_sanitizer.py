@@ -1,6 +1,7 @@
 """Unit tests for content sanitization logic."""
 
 import pytest
+
 from app.utils.sanitizer import sanitize_content
 
 
