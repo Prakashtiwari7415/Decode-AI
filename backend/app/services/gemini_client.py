@@ -66,9 +66,11 @@ class GeminiClient:
         api_key: str,
         model: str = "gemini-3.8-flash",
         timeout_seconds: float = 30.0,
+        fallback_models: list[str] | None = None,
     ) -> None:
         self.api_key = api_key.strip() if api_key else ""
         self.model_name = model
+        self.fallback_models = fallback_models or ["gemini-2.5-flash", "gemini-3-flash-preview"]
         self.timeout_seconds = timeout_seconds
 
         # Instantiate google-genai Client
@@ -117,40 +119,68 @@ class GeminiClient:
             temperature=0.2,
         )
 
-        try:
-            logger.info("Sending generation request to Gemini model: %s", self.model_name)
-            async with asyncio.timeout(self.timeout_seconds):
-                response = await client.aio.models.generate_content(
-                    model=self.model_name,
-                    contents=prompt,
-                    config=config,
+        models_to_try = [self.model_name] + [m for m in self.fallback_models if m != self.model_name]
+        response = None
+        used_model = self.model_name
+
+        for idx, candidate_model in enumerate(models_to_try):
+            try:
+                logger.info("Sending generation request to Gemini model: %s", candidate_model)
+                async with asyncio.timeout(self.timeout_seconds):
+                    response = await client.aio.models.generate_content(
+                        model=candidate_model,
+                        contents=prompt,
+                        config=config,
+                    )
+                used_model = candidate_model
+                break
+            except TimeoutError as exc:
+                logger.error(
+                    "Gemini request timed out after %s seconds on model %s",
+                    self.timeout_seconds,
+                    candidate_model,
                 )
-        except TimeoutError as exc:
-            logger.error("Gemini request timed out after %s seconds", self.timeout_seconds)
-            raise GeminiTimeoutError() from exc
-        except errors.APIError as exc:
-            logger.error("Gemini APIError [code=%s]: %s", exc.code, exc.message)
-            if exc.code in (401, 403):
-                raise GeminiAuthError(
-                    "Gemini API authentication failed. Verify that GEMINI_API_KEY is valid."
-                ) from exc
-            if exc.code == 429:
-                raise GeminiRateLimitError(
-                    "Gemini API rate limit or quota exceeded. Please retry in a few moments."
-                ) from exc
-            if exc.code in (500, 502, 503, 504):
+                if idx < len(models_to_try) - 1:
+                    continue
+                raise GeminiTimeoutError() from exc
+            except errors.APIError as exc:
+                logger.error(
+                    "Gemini APIError [code=%s] on model %s: %s",
+                    exc.code,
+                    candidate_model,
+                    exc.message,
+                )
+                if exc.code == 503 and idx < len(models_to_try) - 1:
+                    logger.warning(
+                        "Model %s returned 503 high demand; falling back to %s",
+                        candidate_model,
+                        models_to_try[idx + 1],
+                    )
+                    continue
+                if exc.code in (401, 403):
+                    raise GeminiAuthError(
+                        "Gemini API authentication failed. Verify that GEMINI_API_KEY is valid."
+                    ) from exc
+                if exc.code == 429:
+                    raise GeminiRateLimitError(
+                        "Gemini API rate limit or quota exceeded. Please retry in a few moments."
+                    ) from exc
+                if exc.code in (500, 502, 503, 504):
+                    raise GeminiError(
+                        detail="Google Gemini service is temporarily unavailable. Please retry.",
+                        status_code=502,
+                    ) from exc
                 raise GeminiError(
-                    detail="Google Gemini service is temporarily unavailable. Please retry.",
-                    status_code=502,
+                    detail=exc.message or "Gemini API error occurred.", status_code=502
                 ) from exc
-            raise GeminiError(
-                detail=exc.message or "Gemini API error occurred.", status_code=502
-            ) from exc
-        except Exception as exc:
-            logger.exception("Unexpected error communicating with Gemini API: %s", exc)
-            raise GeminiError(
-                detail=f"Failed to communicate with AI provider: {exc}", status_code=502
-            ) from exc
+            except Exception as exc:
+                logger.exception("Unexpected error communicating with Gemini API: %s", exc)
+                raise GeminiError(
+                    detail=f"Failed to communicate with AI provider: {exc}", status_code=502
+                ) from exc
+
+        if response is None:
+            raise GeminiError("No response received from Gemini model.", status_code=502)
 
         # Extract response text
         raw_text = getattr(response, "text", None)
@@ -178,16 +208,16 @@ class GeminiClient:
             raise GeminiModelOutputError(f"Model output schema validation failed: {exc}") from exc
 
         # Enrich and normalize lesson
-        return self._enrich_lesson(lesson)
+        return self._enrich_lesson(lesson, used_model=used_model)
 
-    def _enrich_lesson(self, lesson: Lesson) -> Lesson:
+    def _enrich_lesson(self, lesson: Lesson, used_model: str | None = None) -> Lesson:
         """Enrich model output with backend-verified identifiers, timestamps, and duration calculations."""
         # 1. Lesson ID
         if not lesson.lesson_id or lesson.lesson_id.startswith("string"):
             lesson.lesson_id = f"lesson-ai-{uuid.uuid4().hex[:8]}"
 
         # 2. Metadata
-        lesson.gemini_model_version = self.model_name
+        lesson.gemini_model_version = used_model or self.model_name
         lesson.generated_at = datetime.now(UTC).isoformat()
 
         # 3. Ensure valid captions and calculate total duration
