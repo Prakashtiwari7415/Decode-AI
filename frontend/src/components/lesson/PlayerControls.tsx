@@ -32,6 +32,10 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
     audioLoading,
     audioError,
     captionOnlyFallback,
+    sceneElapsedMs,
+    activeSceneDurationMs,
+    getCurrentScene,
+    seekSceneMs,
     togglePlay,
     restart,
     prevScene,
@@ -44,6 +48,20 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
     setNarrationEnabled,
     setCaptionOnlyFallback,
   } = useLessonStore();
+
+  const currentScene = getCurrentScene();
+  const currentSceneDurationMs = useMemo(() => {
+    if (activeSceneDurationMs && activeSceneDurationMs > 0) {
+      return activeSceneDurationMs;
+    }
+    if (!currentScene) return 6000;
+    if (currentScene.captions && currentScene.captions.length > 0) {
+      const last = currentScene.captions[currentScene.captions.length - 1];
+      return Math.max(last.offset_ms + last.duration_ms, 4000);
+    }
+    const words = currentScene.narration_text.split(/\s+/).length;
+    return Math.max(Math.round((words / 125) * 60 * 1000), 4000);
+  }, [activeSceneDurationMs, currentScene]);
 
   const canGoPrevChapter = activeChapterIndex > 0;
   const canGoNextChapter = lesson ? activeChapterIndex < lesson.chapters.length - 1 : false;
@@ -177,10 +195,32 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
             </svg>
           </button>
 
+          {/* Seek -5s */}
+          <button
+            onClick={() => seekSceneMs(Math.max(0, sceneElapsedMs - 5000))}
+            className="px-1.5 py-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 text-[11px] font-mono font-bold transition-colors"
+            title="Rewind 5s (Left Arrow)"
+            aria-label="Rewind 5 seconds"
+          >
+            -5s
+          </button>
+
+          {/* Seek +5s */}
+          <button
+            onClick={() => seekSceneMs(Math.min(currentSceneDurationMs, sceneElapsedMs + 5000))}
+            className="px-1.5 py-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 text-[11px] font-mono font-bold transition-colors"
+            title="Forward 5s (Right Arrow)"
+            aria-label="Forward 5 seconds"
+          >
+            +5s
+          </button>
+
           {/* Duration Indicator */}
-          <div className="text-xs font-mono text-slate-400 pl-2">
-            <span>{totalDurationStr}</span>
-            <span className="text-slate-600 ml-1.5">total</span>
+          <div className="text-xs font-mono text-slate-400 pl-1.5 flex items-center gap-1">
+            <span className="text-slate-200 font-semibold">{formatTime(sceneElapsedMs / 1000)}</span>
+            <span className="text-slate-600">/</span>
+            <span>{formatTime(currentSceneDurationMs / 1000)}</span>
+            <span className="text-slate-600 ml-1 hidden md:inline">({totalDurationStr} total)</span>
           </div>
         </div>
 

@@ -8,7 +8,7 @@ interface CodeDiffSceneProps {
 }
 
 export const CodeDiffScene: React.FC<CodeDiffSceneProps> = ({ visual, title }) => {
-  const { sceneElapsedMs } = useLessonStore();
+  const { sceneElapsedMs, activeSceneDurationMs, activeHighlightTerm } = useLessonStore();
   const [copied, setCopied] = useState<boolean>(false);
 
   const beforeLines = useMemo(
@@ -20,8 +20,10 @@ export const CodeDiffScene: React.FC<CodeDiffSceneProps> = ({ visual, title }) =
     [visual.after_code]
   );
 
-  // Determine active highlight step based on elapsed time (assumes ~6000ms duration)
-  const isSecondPhase = sceneElapsedMs > 3000;
+  // Determine active highlight step dynamically based on calibrated scene duration
+  const totalDuration =
+    activeSceneDurationMs && activeSceneDurationMs > 0 ? activeSceneDurationMs : 6000;
+  const isSecondPhase = sceneElapsedMs >= totalDuration * 0.5;
 
   // Simple, safe token syntax highlighter for python
   const renderSyntaxHighlighted = (codeLine: string) => {
@@ -35,7 +37,20 @@ export const CodeDiffScene: React.FC<CodeDiffSceneProps> = ({ visual, title }) =
       const isHighlightedTerm = visual.highlighted_terms.some(
         (term) => term.toLowerCase() === lower
       );
+      const isActivelySpokenTerm = Boolean(
+        activeHighlightTerm && activeHighlightTerm.toLowerCase() === lower
+      );
 
+      if (isActivelySpokenTerm) {
+        return (
+          <span
+            key={index}
+            className="text-cyan-200 bg-cyan-950/80 px-1 py-0.5 rounded ring-1 ring-cyan-400 font-bold shadow-sm shadow-cyan-500/50"
+          >
+            {token}
+          </span>
+        );
+      }
       if (isKeyword) {
         return (
           <span key={index} className="text-purple-400 font-semibold">

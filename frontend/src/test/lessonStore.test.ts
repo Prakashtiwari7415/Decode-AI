@@ -202,5 +202,29 @@ describe('useLessonStore', () => {
     expect(resetState.audioError).toBeNull();
     expect(resetState.captionOnlyFallback).toBe(false);
     expect(resetState.activeSceneDurationMs).toBeNull();
+    expect(resetState.activeSegmentIndex).toBe(0);
+    expect(resetState.seekTargetMs).toBeNull();
+  });
+
+  it('manages Milestone 4 segment tracking and intra-scene seeking', () => {
+    const store = useLessonStore.getState();
+
+    // Default segment index
+    expect(store.activeSegmentIndex).toBe(0);
+    expect(store.seekTargetMs).toBeNull();
+
+    // Set active segment index
+    store.setActiveSegmentIndex(2);
+    expect(useLessonStore.getState().activeSegmentIndex).toBe(2);
+
+    // Intra-scene seeking
+    store.seekSceneMs(4500);
+    expect(useLessonStore.getState().seekTargetMs).toBe(4500);
+    expect(useLessonStore.getState().sceneElapsedMs).toBe(4500);
+
+    // Clear seek target
+    store.clearSeekTarget();
+    expect(useLessonStore.getState().seekTargetMs).toBeNull();
+    expect(useLessonStore.getState().sceneElapsedMs).toBe(4500);
   });
 });

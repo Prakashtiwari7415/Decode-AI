@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { useLessonStore } from '../stores/lessonStore';
 import { PlayerViewport } from '../components/lesson/PlayerViewport';
 import { PlayerControls } from '../components/lesson/PlayerControls';
@@ -219,5 +219,56 @@ describe('Player Components', () => {
     const itemText = screen.getByText(/Ensure input iterable is non-mutated/i);
     fireEvent.click(itemText);
     expect(useLessonStore.getState().checkedVerificationIds['chk-01']).toBe(true);
+  });
+
+  it('triggers intra-scene seeking via rewind and forward buttons in PlayerControls', () => {
+    act(() => {
+      useLessonStore.getState().setActiveSceneDurationMs(10000);
+      useLessonStore.getState().seekSceneMs(6000);
+      useLessonStore.getState().clearSeekTarget();
+    });
+
+    render(<PlayerControls />);
+
+    // Check time display renders MM:SS / MM:SS
+    expect(screen.getByText('00:06')).toBeInTheDocument();
+    expect(screen.getByText('00:10')).toBeInTheDocument();
+
+    // Click rewind 5s -> should seek to 1000ms
+    const rewindBtn = screen.getByRole('button', { name: 'Rewind 5 seconds' });
+    act(() => {
+      fireEvent.click(rewindBtn);
+    });
+    expect(useLessonStore.getState().seekTargetMs).toBe(1000);
+    expect(useLessonStore.getState().sceneElapsedMs).toBe(1000);
+
+    // Update to 7000ms
+    act(() => {
+      useLessonStore.getState().clearSeekTarget();
+      useLessonStore.getState().seekSceneMs(7000);
+      useLessonStore.getState().clearSeekTarget();
+    });
+
+    // Click forward 5s -> should clamp to scene duration 10000ms (7000 + 5000 clamped to 10000)
+    const forwardBtn = screen.getByRole('button', { name: 'Forward 5 seconds' });
+    act(() => {
+      fireEvent.click(forwardBtn);
+    });
+    expect(useLessonStore.getState().seekTargetMs).toBe(10000);
+  });
+
+  it('dynamically highlights architecture pipeline nodes coordinated with activeHighlightTerm', () => {
+    const visual = mockLesson.chapters[1].scenes[0].visual;
+
+    // Set active highlight term to 'API Gateway'
+    useLessonStore.getState().setActiveHighlightTerm('API Gateway');
+
+    render(<ArchitectureScene visual={visual} title="System Execution Pipeline" />);
+
+    // When API Gateway is mentioned, phase 2 of 3 is active
+    expect(screen.getByText(/Phase 2 of 3/i)).toBeInTheDocument();
+
+    // Clean up
+    useLessonStore.getState().setActiveHighlightTerm(null);
   });
 });

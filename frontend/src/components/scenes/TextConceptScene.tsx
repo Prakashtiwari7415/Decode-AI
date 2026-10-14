@@ -8,7 +8,7 @@ interface TextConceptSceneProps {
 }
 
 export const TextConceptScene: React.FC<TextConceptSceneProps> = ({ visual, title }) => {
-  const { setActiveHighlightTerm } = useLessonStore();
+  const { activeHighlightTerm, setActiveHighlightTerm } = useLessonStore();
 
   return (
     <div className="w-full h-full flex flex-col justify-between p-6 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 rounded-xl overflow-hidden select-none">
@@ -64,15 +64,25 @@ export const TextConceptScene: React.FC<TextConceptSceneProps> = ({ visual, titl
       <div className="bg-slate-950/80 border border-slate-800/80 rounded-lg p-3 text-xs flex items-center justify-between">
         <span className="text-slate-400">Key Vocabulary:</span>
         <div className="flex flex-wrap gap-2">
-          {visual.highlighted_terms.map((term) => (
-            <button
-              key={term}
-              onClick={() => setActiveHighlightTerm(term)}
-              className="px-2.5 py-1 rounded bg-indigo-950/50 hover:bg-indigo-900/60 border border-indigo-800/60 text-indigo-300 text-xs font-medium transition-colors"
-            >
-              🔍 {term}
-            </button>
-          ))}
+          {visual.highlighted_terms.map((term) => {
+            const isSpoken = Boolean(
+              activeHighlightTerm && activeHighlightTerm.toLowerCase() === term.toLowerCase()
+            );
+
+            return (
+              <button
+                key={term}
+                onClick={() => setActiveHighlightTerm(term)}
+                className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${
+                  isSpoken
+                    ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200 ring-1 ring-cyan-400 shadow-md shadow-cyan-500/30 scale-105'
+                    : 'bg-indigo-950/50 hover:bg-indigo-900/60 border border-indigo-800/60 text-indigo-300'
+                }`}
+              >
+                🔍 {term}
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>

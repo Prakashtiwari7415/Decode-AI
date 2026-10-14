@@ -18,7 +18,7 @@ interface NodeInfo {
 }
 
 export const ArchitectureScene: React.FC<ArchitectureSceneProps> = ({ visual, title }) => {
-  const { sceneElapsedMs } = useLessonStore();
+  const { sceneElapsedMs, activeSceneDurationMs, activeHighlightTerm } = useLessonStore();
 
   // Nodes in the pipeline
   const nodes: NodeInfo[] = useMemo(
@@ -72,12 +72,23 @@ export const ArchitectureScene: React.FC<ArchitectureSceneProps> = ({ visual, ti
     []
   );
 
-  // Determine current active phase based on elapsed time (assumes ~9000ms duration)
+  // Dynamically determine current active phase coordinated with spoken term or elapsed progress
   const currentPhase = useMemo(() => {
-    if (sceneElapsedMs < 3000) return 0;
-    if (sceneElapsedMs < 6000) return 1;
+    if (activeHighlightTerm) {
+      const lower = activeHighlightTerm.toLowerCase();
+      const matchedNode = nodes.find(
+        (n) => n.name.toLowerCase().includes(lower) || n.role.toLowerCase().includes(lower)
+      );
+      if (matchedNode) return matchedNode.phase;
+    }
+
+    const duration =
+      activeSceneDurationMs && activeSceneDurationMs > 0 ? activeSceneDurationMs : 6000;
+    const ratio = Math.max(0, Math.min(1, sceneElapsedMs / duration));
+    if (ratio < 0.33) return 0;
+    if (ratio < 0.67) return 1;
     return 2;
-  }, [sceneElapsedMs]);
+  }, [sceneElapsedMs, activeSceneDurationMs, activeHighlightTerm, nodes]);
 
   return (
     <div className="w-full h-full flex flex-col justify-between p-6 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 rounded-xl overflow-hidden select-none">
@@ -128,14 +139,21 @@ export const ArchitectureScene: React.FC<ArchitectureSceneProps> = ({ visual, ti
         {/* Node Cards Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 relative z-10">
           {nodes.map((node) => {
-            const isActive = node.phase === currentPhase;
-            const isCompleted = node.phase < currentPhase;
+            const isDirectlyMentioned = Boolean(
+              activeHighlightTerm &&
+                (node.name.toLowerCase().includes(activeHighlightTerm.toLowerCase()) ||
+                  node.role.toLowerCase().includes(activeHighlightTerm.toLowerCase()))
+            );
+            const isActive = isDirectlyMentioned || node.phase === currentPhase;
+            const isCompleted = !isDirectlyMentioned && node.phase < currentPhase;
 
             return (
               <div
                 key={node.id}
                 className={`relative flex flex-col justify-between p-4 rounded-xl border transition-all duration-500 ${
-                  isActive
+                  isDirectlyMentioned
+                    ? 'bg-slate-900/95 border-emerald-400 shadow-xl shadow-emerald-500/25 scale-105 ring-2 ring-emerald-400/50'
+                    : isActive
                     ? 'bg-slate-900/90 border-cyan-400 shadow-lg shadow-cyan-500/20 scale-105 ring-2 ring-cyan-400/30'
                     : isCompleted
                     ? 'bg-slate-950/90 border-indigo-500/50 text-slate-300'

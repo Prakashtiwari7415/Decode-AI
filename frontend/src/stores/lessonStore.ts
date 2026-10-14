@@ -22,6 +22,10 @@ export interface LessonState {
   captionOnlyFallback: boolean;
   activeSceneDurationMs: number | null;
 
+  // Milestone 4 Synchronized Playback & Seeking State
+  activeSegmentIndex: number;
+  seekTargetMs: number | null;
+
   // Computed helper methods
   getCurrentChapter: () => Chapter | null;
   getCurrentScene: () => Scene | null;
@@ -55,6 +59,11 @@ export interface LessonState {
   setCaptionOnlyFallback: (fallback: boolean) => void;
   setActiveSceneDurationMs: (ms: number | null) => void;
   reset: () => void;
+
+  // Milestone 4 Actions
+  setActiveSegmentIndex: (index: number) => void;
+  seekSceneMs: (targetMs: number) => void;
+  clearSeekTarget: () => void;
 }
 
 const initialAudioState = {
@@ -64,6 +73,8 @@ const initialAudioState = {
   audioError: null,
   captionOnlyFallback: false,
   activeSceneDurationMs: null,
+  activeSegmentIndex: 0,
+  seekTargetMs: null as number | null,
 };
 
 export const useLessonStore = create<LessonState>((set, get) => ({
@@ -269,6 +280,19 @@ export const useLessonStore = create<LessonState>((set, get) => ({
 
   setActiveSceneDurationMs: (activeSceneDurationMs: number | null) =>
     set({ activeSceneDurationMs }),
+
+  // Milestone 4 Actions
+  setActiveSegmentIndex: (activeSegmentIndex: number) => set({ activeSegmentIndex }),
+
+  seekSceneMs: (targetMs: number) => {
+    const { activeSceneDurationMs } = get();
+    const maxDuration =
+      activeSceneDurationMs && activeSceneDurationMs > 0 ? activeSceneDurationMs : 60000;
+    const clamped = Math.max(0, Math.min(targetMs, maxDuration));
+    set({ sceneElapsedMs: clamped, seekTargetMs: clamped });
+  },
+
+  clearSeekTarget: () => set({ seekTargetMs: null }),
 
   reset: () =>
     set({

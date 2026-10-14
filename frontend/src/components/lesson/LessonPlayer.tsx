@@ -15,6 +15,8 @@ export const LessonPlayer: React.FC<LessonPlayerProps> = ({ onBackToInput }) => 
 
   const {
     lesson,
+    sceneElapsedMs,
+    seekSceneMs,
     togglePlay,
     prevScene,
     nextScene,
@@ -39,10 +41,18 @@ export const LessonPlayer: React.FC<LessonPlayerProps> = ({ onBackToInput }) => 
         togglePlay();
       } else if (e.code === 'ArrowLeft') {
         e.preventDefault();
-        prevScene();
+        if (e.shiftKey) {
+          prevScene();
+        } else {
+          seekSceneMs(Math.max(0, sceneElapsedMs - 5000));
+        }
       } else if (e.code === 'ArrowRight') {
         e.preventDefault();
-        nextScene();
+        if (e.shiftKey) {
+          nextScene();
+        } else {
+          seekSceneMs(sceneElapsedMs + 5000);
+        }
       } else if (e.code === 'KeyM') {
         toggleMute();
       } else if (e.code === 'KeyC') {
@@ -54,7 +64,7 @@ export const LessonPlayer: React.FC<LessonPlayerProps> = ({ onBackToInput }) => 
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [togglePlay, prevScene, nextScene, toggleMute, toggleCaptions]);
+  }, [togglePlay, prevScene, nextScene, toggleMute, toggleCaptions, sceneElapsedMs, seekSceneMs]);
 
   // Fullscreen toggle handler
   const handleToggleFullscreen = () => {

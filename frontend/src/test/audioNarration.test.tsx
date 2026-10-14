@@ -180,4 +180,23 @@ describe('useAudioNarration and useLessonTimeline', () => {
       expect(useLessonStore.getState().currentCaptionText).toBe('Hello, welcome to this lesson');
     });
   });
+
+  it('updates caption, segment index, and active highlight term when seeking intra-scene', async () => {
+    act(() => {
+      useLessonStore.getState().play();
+    });
+
+    renderHook(() => useLessonTimeline());
+
+    // Seek to 3000ms (within second caption segment: 2500ms - 5000ms)
+    act(() => {
+      useLessonStore.getState().seekSceneMs(3000);
+    });
+
+    await waitFor(() => {
+      expect(useLessonStore.getState().currentCaptionText).toBe('about asynchronous queues.');
+      expect(useLessonStore.getState().activeSegmentIndex).toBe(1);
+      expect(useLessonStore.getState().activeHighlightTerm).toBe('asynchronous');
+    });
+  });
 });
