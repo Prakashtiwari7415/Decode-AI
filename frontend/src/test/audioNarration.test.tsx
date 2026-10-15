@@ -1,9 +1,8 @@
-import { describe, it, expect, beforeEach, vi, afterEach, type MockInstance } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useLessonStore } from '../stores/lessonStore';
-import { useAudioNarration, clearClientAudioCache } from '../hooks/useAudioNarration';
+import { useSpeechNarration, isSpeechSynthesisSupported, getLanguageCode } from '../hooks/useAudioNarration';
 import { useLessonTimeline } from '../hooks/useLessonTimeline';
-import * as api from '../services/api';
 import { Lesson } from '../types/lesson';
 
 const mockLesson: Lesson = {
@@ -52,194 +51,222 @@ const mockLesson: Lesson = {
   ],
   glossary: [],
   verification_checklist: [],
-  gemini_model_version: 'gemini-3.8-flash-fixture',
+  gemini_model_version: 'gemini-3.8-flash',
   generated_at: '2026-10-15T00:00:00Z',
 };
 
-describe('useAudioNarration and useLessonTimeline', () => {
-  let mockFetchAudio: MockInstance;
+describe('useSpeechNarration and Web Speech API Integration', () => {
+  let mockSpeak: ReturnType<typeof vi.fn>;
+  let mockCancel: ReturnType<typeof vi.fn>;
+  let mockGetVoices: ReturnType<typeof vi.fn>;
+  let originalSpeechSynthesis: typeof window.speechSynthesis | undefined;
+  let originalUtterance: typeof window.SpeechSynthesisUtterance | undefined;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    clearClientAudioCache();
-    api.clearInFlightAudioRequests();
     useLessonStore.getState().reset();
     useLessonStore.getState().setLesson(mockLesson);
 
-    // Mock fetchSceneNarrationAudio to return a dummy Blob
-    const dummyBlob = new Blob(['RIFF....WAVEfmt '], { type: 'audio/wav' });
-    mockFetchAudio = vi.spyOn(api, 'fetchSceneNarrationAudio').mockResolvedValue(dummyBlob);
+    mockSpeak = vi.fn();
+    mockCancel = vi.fn();
+    mockGetVoices = vi.fn().mockReturnValue([
+      { name: 'Google US English', lang: 'en-US', default: true },
+      { name: 'Google Hindi', lang: 'hi-IN', default: false },
+    ]);
+
+    originalSpeechSynthesis = window.speechSynthesis;
+    originalUtterance = window.SpeechSynthesisUtterance;
+
+    // Mock window.speechSynthesis and SpeechSynthesisUtterance
+    const mockSynth = {
+      speak: mockSpeak,
+      cancel: mockCancel,
+      getVoices: mockGetVoices,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      paused: false,
+      pending: false,
+      speaking: false,
+    };
+
+    class MockUtterance {
+      text: string;
+      lang = 'en-US';
+      rate = 1;
+      voice: any = null;
+      onstart: (() => void) | null = null;
+      onend: (() => void) | null = null;
+      onerror: ((e: any) => void) | null = null;
+      constructor(text: string) {
+        this.text = text;
+      }
+    }
+
+    Object.defineProperty(window, 'speechSynthesis', {
+      value: mockSynth,
+      writable: true,
+      configurable: true,
+    });
+
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', {
+      value: MockUtterance,
+      writable: true,
+      configurable: true,
+    });
   });
 
   afterEach(() => {
-    mockFetchAudio.mockRestore();
+    if (originalSpeechSynthesis) {
+      Object.defineProperty(window, 'speechSynthesis', {
+        value: originalSpeechSynthesis,
+        writable: true,
+        configurable: true,
+      });
+    } else {
+      delete (window as any).speechSynthesis;
+    }
+    if (originalUtterance) {
+      Object.defineProperty(window, 'SpeechSynthesisUtterance', {
+        value: originalUtterance,
+        writable: true,
+        configurable: true,
+      });
+    } else {
+      delete (window as any).SpeechSynthesisUtterance;
+    }
   });
 
-  it('fetches narration audio on scene load with correct parameters', async () => {
-    const { result } = renderHook(() => useAudioNarration());
-
-    await waitFor(() => {
-      expect(mockFetchAudio).toHaveBeenCalledTimes(1);
-    });
-
-    expect(mockFetchAudio).toHaveBeenCalledWith(
-      {
-        text: 'Hello, welcome to this lesson about asynchronous queues.',
-        language: 'en',
-        voice: 'Puck',
-        is_fixture: true,
-      },
-      expect.any(AbortSignal)
-    );
-
-    expect(result.current.audioElement).toBeDefined();
-    expect(useLessonStore.getState().audioLoading).toBe(false);
-    expect(useLessonStore.getState().audioError).toBeNull();
+  it('detects Web Speech API support and maps language codes correctly', () => {
+    expect(isSpeechSynthesisSupported()).toBe(true);
+    expect(getLanguageCode('en')).toBe('en-US');
+    expect(getLanguageCode('hi')).toBe('hi-IN');
+    expect(getLanguageCode('hinglish')).toBe('hi-IN');
   });
 
-  it('reuses in-memory cached audio and does not refetch when returning to a visited scene', async () => {
-    renderHook(() => useAudioNarration());
+  it('never calls any network TTS API when loading or switching scenes', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch');
 
-    await waitFor(() => {
-      expect(mockFetchAudio).toHaveBeenCalledTimes(1);
-    });
+    const { result } = renderHook(() => useSpeechNarration());
+    expect(result.current.isSupported).toBe(true);
 
-    // Advance to scene 2 -> triggers second fetch
+    // Advance to scene 2
     act(() => {
       useLessonStore.getState().nextScene();
     });
 
-    await waitFor(() => {
-      expect(mockFetchAudio).toHaveBeenCalledTimes(2);
-    });
-
-    // Navigate back to scene 1 -> should hit in-memory session cache without calling fetch
+    // Advance back to scene 1
     act(() => {
       useLessonStore.getState().prevScene();
     });
 
-    // Call count remains 2 (cache hit!)
-    expect(mockFetchAudio).toHaveBeenCalledTimes(2);
+    // Zero network calls made for narration!
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
   });
 
-  it('switches voice and triggers a new audio fetch with the selected voice', async () => {
-    renderHook(() => useAudioNarration());
+  it('speaks the current scene narration text and stops cleanly', async () => {
+    const { result } = renderHook(() => useSpeechNarration());
 
-    await waitFor(() => {
-      expect(mockFetchAudio).toHaveBeenCalledTimes(1);
-    });
-
-    // Change voice to Aoede
     act(() => {
-      useLessonStore.getState().setSelectedVoice('Aoede');
+      result.current.speakCurrentScene();
     });
 
-    await waitFor(() => {
-      expect(mockFetchAudio).toHaveBeenCalledTimes(2);
-    });
+    expect(mockCancel).toHaveBeenCalled();
+    expect(mockSpeak).toHaveBeenCalledTimes(1);
 
-    expect(mockFetchAudio).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        voice: 'Aoede',
-      }),
-      expect.any(AbortSignal)
-    );
+    const utteranceArg = mockSpeak.mock.calls[0][0];
+    expect(utteranceArg.text).toBe('Hello, welcome to this lesson about asynchronous queues.');
+    expect(utteranceArg.lang).toBe('en-US');
+
+    // Simulate speech start event
+    act(() => {
+      if (utteranceArg.onstart) utteranceArg.onstart();
+    });
+    expect(useLessonStore.getState().isSpeaking).toBe(true);
+
+    // Stop speech
+    act(() => {
+      result.current.stopSpeech();
+    });
+    expect(mockCancel).toHaveBeenCalled();
+    expect(useLessonStore.getState().isSpeaking).toBe(false);
   });
 
-  it('handles TTS API errors gracefully by enabling caption-only fallback', async () => {
-    mockFetchAudio.mockRejectedValueOnce(new api.ApiError(502, 'Gemini TTS unavailable'));
+  it('cancels active speech when switching scenes to prevent overlapping narration', async () => {
+    const { result } = renderHook(() => useSpeechNarration());
 
-    renderHook(() => useAudioNarration());
-
-    await waitFor(() => {
-      expect(useLessonStore.getState().audioError).toBe('Gemini TTS unavailable');
+    act(() => {
+      result.current.speakCurrentScene();
     });
+    expect(mockSpeak).toHaveBeenCalledTimes(1);
 
-    expect(useLessonStore.getState().captionOnlyFallback).toBe(true);
-    expect(useLessonStore.getState().audioLoading).toBe(false);
-  });
-
-  it('handles 429 quota rate limit by extracting retryAfter and entering caption-only mode', async () => {
-    mockFetchAudio.mockRejectedValueOnce(
-      new api.ApiError(429, 'Gemini TTS rate limit or quota exceeded.', 15)
-    );
-
-    renderHook(() => useAudioNarration());
-
-    await waitFor(() => {
-      expect(useLessonStore.getState().audioError).toContain('Gemini TTS rate limit/quota reached');
-    });
-
-    expect(useLessonStore.getState().retryAfterSeconds).toBe(15);
-    expect(useLessonStore.getState().captionOnlyFallback).toBe(true);
-    expect(useLessonStore.getState().audioLoading).toBe(false);
-  });
-
-  it('aborts prior pending request when switching scenes rapidly', async () => {
-    const signals: AbortSignal[] = [];
-    mockFetchAudio.mockImplementation((_req, signal) => {
-      if (signal) signals.push(signal);
-      return new Promise(() => {}); // unresolved hanging promise
-    });
-
-    renderHook(() => useAudioNarration());
-
-    await waitFor(() => {
-      expect(signals.length).toBe(1);
-    });
-
-    expect(signals[0].aborted).toBe(false);
-
-    // Switch scene rapidly
+    // Switch scene
     act(() => {
       useLessonStore.getState().nextScene();
     });
 
-    await waitFor(() => {
-      expect(signals.length).toBe(2);
-    });
-
-    // The prior signal should now be aborted, while the new signal is active
-    expect(signals[0].aborted).toBe(true);
-    expect(signals[1].aborted).toBe(false);
+    // Speech was canceled on scene switch
+    expect(mockCancel).toHaveBeenCalled();
+    expect(useLessonStore.getState().isSpeaking).toBe(false);
   });
 
-  it('does not fetch audio when narration is disabled by the user', async () => {
+  it('cancels speech when user pauses playback', async () => {
+    useLessonStore.getState().setNarrationEnabled(true);
+    useLessonStore.getState().play();
+
+    renderHook(() => useSpeechNarration());
+
+    // User pauses
     act(() => {
-      useLessonStore.getState().toggleNarration(); // narrationEnabled -> false
+      useLessonStore.getState().pause();
     });
 
-    renderHook(() => useAudioNarration());
-
-    expect(mockFetchAudio).not.toHaveBeenCalled();
-    expect(useLessonStore.getState().audioLoading).toBe(false);
+    expect(mockCancel).toHaveBeenCalled();
+    expect(useLessonStore.getState().isSpeaking).toBe(false);
   });
 
-  it('synchronizes timeline and captions via useLessonTimeline', async () => {
+  it('handles unsupported browser environment gracefully in caption-only mode without errors', () => {
+    // Delete speechSynthesis to simulate unsupported browser
+    delete (window as any).speechSynthesis;
+
+    expect(isSpeechSynthesisSupported()).toBe(false);
+
+    const { result } = renderHook(() => useSpeechNarration());
+    expect(result.current.isSupported).toBe(false);
+
+    // Calling speak or toggle should not throw
+    expect(() => {
+      result.current.speakCurrentScene();
+      result.current.toggleSpeech();
+      result.current.stopSpeech();
+    }).not.toThrow();
+
+    expect(useLessonStore.getState().isSpeaking).toBe(false);
+  });
+
+  it('synchronizes estimated timeline and captions via useLessonTimeline', async () => {
     act(() => {
       useLessonStore.getState().play();
     });
 
     const { result } = renderHook(() => useLessonTimeline());
-
-    expect(result.current.audio).toBeDefined();
     const duration = result.current.getSceneDurationMs();
     expect(duration).toBeGreaterThan(0);
 
-    // Initial caption matches offset 0 when playback loop ticks
+    // Initial caption matches offset 0
     await waitFor(() => {
       expect(useLessonStore.getState().currentCaptionText).toBe('Hello, welcome to this lesson');
     });
   });
 
-  it('updates caption, segment index, and active highlight term when seeking intra-scene', async () => {
+  it('updates caption and active highlight term when seeking intra-scene', async () => {
     act(() => {
       useLessonStore.getState().play();
     });
 
     renderHook(() => useLessonTimeline());
 
-    // Seek to 3000ms (within second caption segment: 2500ms - 5000ms)
+    // Seek to 3000ms (within second segment: 2500ms - 5000ms)
     act(() => {
       useLessonStore.getState().seekSceneMs(3000);
     });

@@ -16,8 +16,6 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = 10
     gemini_model: str = "gemini-3.8-flash"
     gemini_timeout_seconds: float = 30.0
-    gemini_tts_model: str = "gemini-3.8-flash-tts"
-    gemini_tts_timeout_seconds: float = 20.0
 
     model_config = SettingsConfigDict(
         env_file=".env",

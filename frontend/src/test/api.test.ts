@@ -1,130 +1,57 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import {
-  fetchSceneNarrationAudio,
-  generateLesson,
-  clearInFlightAudioRequests,
-  ApiError,
-} from '../services/api';
+import { generateLesson, ApiError } from '../services/api';
 
 describe('API Service (api.ts)', () => {
   const originalFetch = global.fetch;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    clearInFlightAudioRequests();
   });
 
   afterEach(() => {
     global.fetch = originalFetch;
   });
 
-  it('coalesces concurrent narration audio requests for identical text into a single fetch call', async () => {
-    let fetchCount = 0;
-    const fakeBlob = new Blob(['RIFFaudio'], { type: 'audio/wav' });
-
-    global.fetch = vi.fn().mockImplementation(async () => {
-      fetchCount += 1;
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      return {
-        ok: true,
-        status: 200,
-        blob: async () => fakeBlob,
-        headers: new Headers(),
-      } as unknown as Response;
-    });
-
-    const req = {
-      text: 'Concurrent narration request text.',
-      language: 'en' as const,
-      voice: 'Puck' as const,
-      is_fixture: false,
+  it('successfully calls POST /api/lessons/generate and returns Lesson JSON', async () => {
+    const fakeLesson = {
+      lesson_id: 'lesson-123',
+      title: 'Testing Python Generative Lesson',
+      language: 'en',
+      content_type: 'explanation',
+      total_estimated_duration_ms: 12000,
+      chapters: [],
+      glossary: [],
+      verification_checklist: [],
+      gemini_model_version: 'gemini-3.8-flash',
+      generated_at: '2026-10-15T00:00:00Z',
     };
-
-    // Fire 3 simultaneous requests for identical input
-    const [blob1, blob2, blob3] = await Promise.all([
-      fetchSceneNarrationAudio(req),
-      fetchSceneNarrationAudio(req),
-      fetchSceneNarrationAudio(req),
-    ]);
-
-    // Single-flight deduplication: exactly 1 fetch invocation
-    expect(fetchCount).toBe(1);
-    expect(blob1).toBe(blob2);
-    expect(blob2).toBe(blob3);
-  });
-
-  it('parses Retry-After header and body on HTTP 429 and attaches retryAfter to ApiError', async () => {
-    const errorBody = {
-      type: 'https://errors.decodeai.dev/rate-limit',
-      title: 'Gemini TTS Rate Limit',
-      status: 429,
-      detail: 'Resource quota exhausted for model.',
-      retry_after: 25,
-    };
-
-    const headers = new Headers();
-    headers.set('Retry-After', '25');
 
     global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 429,
-      statusText: 'Too Many Requests',
-      headers,
-      json: async () => errorBody,
+      ok: true,
+      status: 200,
+      json: async () => fakeLesson,
     } as unknown as Response);
 
-    const req = {
-      text: 'Text under rate limit',
-      language: 'en' as const,
-      voice: 'Kore' as const,
-    };
-
-    let caughtError: ApiError | null = null;
-    try {
-      await fetchSceneNarrationAudio(req);
-    } catch (err) {
-      if (err instanceof ApiError) {
-        caughtError = err;
-      }
-    }
-
-    expect(caughtError).not.toBeNull();
-    expect(caughtError?.status).toBe(429);
-    expect(caughtError?.detail).toBe('Resource quota exhausted for model.');
-    expect(caughtError?.retryAfter).toBe(25);
-  });
-
-  it('honors AbortSignal when user cancels request in-flight', async () => {
-    const controller = new AbortController();
-
-    global.fetch = vi.fn().mockImplementation((_url, opts) => {
-      if (opts?.signal?.aborted) {
-        const error = new Error('The operation was aborted');
-        error.name = 'AbortError';
-        return Promise.reject(error);
-      }
-      return new Promise((_resolve, reject) => {
-        opts?.signal?.addEventListener('abort', () => {
-          const error = new Error('The operation was aborted');
-          error.name = 'AbortError';
-          reject(error);
-        });
-      });
+    const result = await generateLesson({
+      content: 'def add(a, b): return a + b',
+      content_type: 'explanation',
+      language: 'en',
+      detail_level: 'standard',
     });
 
-    const req = {
-      text: 'Long audio generation',
-      language: 'en' as const,
-      voice: 'Puck' as const,
-    };
-
-    const promise = fetchSceneNarrationAudio(req, controller.signal);
-    controller.abort();
-
-    await expect(promise).rejects.toThrow('The operation was aborted');
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledWith(
+      '/api/lessons/generate',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
+      })
+    );
+    expect(result.lesson_id).toBe('lesson-123');
+    expect(result.title).toBe('Testing Python Generative Lesson');
   });
 
-  it('parses error detail from API responses in generateLesson', async () => {
+  it('parses error detail from API responses in generateLesson and throws ApiError', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 400,
@@ -141,5 +68,70 @@ describe('API Service (api.ts)', () => {
         detail_level: 'standard',
       })
     ).rejects.toThrow('Prohibited injection pattern');
+  });
+
+  it('parses array of validation errors in generateLesson', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 422,
+      statusText: 'Unprocessable Entity',
+      headers: new Headers(),
+      json: async () => ({
+        detail: [{ msg: 'String should have at least 10 characters' }],
+      }),
+    } as unknown as Response);
+
+    let caughtError: ApiError | null = null;
+    try {
+      await generateLesson({
+        content: 'short',
+        content_type: 'explanation',
+        language: 'en',
+        detail_level: 'standard',
+      });
+    } catch (err) {
+      if (err instanceof ApiError) {
+        caughtError = err;
+      }
+    }
+
+    expect(caughtError).not.toBeNull();
+    expect(caughtError?.status).toBe(422);
+    expect(caughtError?.detail).toBe('String should have at least 10 characters');
+  });
+
+  it('parses Retry-After header on HTTP 429 when present', async () => {
+    const headers = new Headers();
+    headers.set('Retry-After', '30');
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      statusText: 'Too Many Requests',
+      headers,
+      json: async () => ({
+        title: 'Quota Exceeded',
+        detail: 'Rate limit reached',
+        retry_after: 30,
+      }),
+    } as unknown as Response);
+
+    let caughtError: ApiError | null = null;
+    try {
+      await generateLesson({
+        content: 'def test(): pass',
+        content_type: 'explanation',
+        language: 'en',
+        detail_level: 'standard',
+      });
+    } catch (err) {
+      if (err instanceof ApiError) {
+        caughtError = err;
+      }
+    }
+
+    expect(caughtError).not.toBeNull();
+    expect(caughtError?.status).toBe(429);
+    expect(caughtError?.retryAfter).toBe(30);
   });
 });

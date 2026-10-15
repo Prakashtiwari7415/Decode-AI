@@ -9,7 +9,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
-from app.routers.audio import router as audio_router
 from app.routers.health import router as health_router
 from app.routers.lesson import router as lesson_router
 
@@ -47,7 +46,6 @@ def create_app() -> FastAPI:
     # Register API routers under /api prefix
     app.include_router(health_router, prefix="/api")
     app.include_router(lesson_router, prefix="/api")
-    app.include_router(audio_router, prefix="/api")
 
     # RFC 9457 Exception Handler for ValueError
     @app.exception_handler(ValueError)

@@ -157,35 +157,25 @@ describe('useLessonStore', () => {
     expect(useLessonStore.getState().checkedVerificationIds['v1']).toBe(false);
   });
 
-  it('manages Milestone 3 audio narration state and voice selection', () => {
+  it('manages speech narration state and Web Speech API toggles', () => {
     const store = useLessonStore.getState();
 
-    // Default voice is Puck and narration is enabled
-    expect(store.selectedVoice).toBe('Puck');
-    expect(store.narrationEnabled).toBe(true);
-    expect(store.audioLoading).toBe(false);
-    expect(store.audioError).toBeNull();
-    expect(store.captionOnlyFallback).toBe(false);
-
-    // Set voice
-    store.setSelectedVoice('Fenrir');
-    expect(useLessonStore.getState().selectedVoice).toBe('Fenrir');
+    // Default narration state
+    expect(store.narrationEnabled).toBe(false);
+    expect(store.isSpeaking).toBe(false);
+    expect(store.speechSupported).toBe(true);
 
     // Toggle narration
     store.toggleNarration();
-    expect(useLessonStore.getState().narrationEnabled).toBe(false);
-    store.toggleNarration();
     expect(useLessonStore.getState().narrationEnabled).toBe(true);
+    store.toggleNarration();
+    expect(useLessonStore.getState().narrationEnabled).toBe(false);
 
-    // Audio loading and error
-    store.setAudioLoading(true);
-    expect(useLessonStore.getState().audioLoading).toBe(true);
-    store.setAudioError('Quota exceeded');
-    expect(useLessonStore.getState().audioError).toBe('Quota exceeded');
-
-    // Caption-only fallback
-    store.setCaptionOnlyFallback(true);
-    expect(useLessonStore.getState().captionOnlyFallback).toBe(true);
+    // Set speaking state
+    store.setIsSpeaking(true);
+    expect(useLessonStore.getState().isSpeaking).toBe(true);
+    store.setIsSpeaking(false);
+    expect(useLessonStore.getState().isSpeaking).toBe(false);
 
     // Active scene duration
     store.setActiveSceneDurationMs(8500);
@@ -198,15 +188,13 @@ describe('useLessonStore', () => {
     expect(resetState.activeChapterIndex).toBe(0);
     expect(resetState.activeSceneIndex).toBe(0);
     expect(resetState.isPlaying).toBe(false);
-    expect(resetState.audioLoading).toBe(false);
-    expect(resetState.audioError).toBeNull();
-    expect(resetState.captionOnlyFallback).toBe(false);
+    expect(resetState.isSpeaking).toBe(false);
     expect(resetState.activeSceneDurationMs).toBeNull();
     expect(resetState.activeSegmentIndex).toBe(0);
     expect(resetState.seekTargetMs).toBeNull();
   });
 
-  it('manages Milestone 4 segment tracking and intra-scene seeking', () => {
+  it('manages segment tracking and intra-scene seeking', () => {
     const store = useLessonStore.getState();
 
     // Default segment index
@@ -232,44 +220,18 @@ describe('useLessonStore', () => {
     const store = useLessonStore.getState();
 
     // With lesson loaded and initial paused state
-    expect(store.getPlaybackStatus()).toBe('paused_audio');
+    expect(store.getPlaybackStatus()).toBe('paused');
 
-    // When user plays with audio enabled
+    // When user plays
     store.play();
-    expect(store.getPlaybackStatus()).toBe('playing_audio');
+    expect(store.getPlaybackStatus()).toBe('playing');
 
-    // When audio is synthesizing in the background
-    store.setAudioLoading(true);
-    expect(store.getPlaybackStatus()).toBe('requesting_audio');
-    store.setAudioLoading(false);
-
-    // When audio encounters an unhandled error
-    store.setAudioError('Gemini 429 rate limit');
-    expect(store.getPlaybackStatus()).toBe('error');
-
-    // When switched to caption-only fallback
-    store.setCaptionOnlyFallback(true);
-    expect(store.getPlaybackStatus()).toBe('caption_only');
-
-    // When muted while playing
-    store.setCaptionOnlyFallback(false);
-    store.setAudioError(null);
-    store.toggleMute();
-    expect(store.getPlaybackStatus()).toBe('caption_only');
+    // When user pauses
+    store.pause();
+    expect(store.getPlaybackStatus()).toBe('paused');
 
     // When lesson is reset
     store.reset();
     expect(store.getPlaybackStatus()).toBe('idle');
-  });
-
-  it('tracks retryAfterSeconds cooldown correctly', () => {
-    const store = useLessonStore.getState();
-    expect(store.retryAfterSeconds).toBeNull();
-
-    store.setRetryAfterSeconds(20);
-    expect(useLessonStore.getState().retryAfterSeconds).toBe(20);
-
-    store.setRetryAfterSeconds(null);
-    expect(useLessonStore.getState().retryAfterSeconds).toBeNull();
   });
 });

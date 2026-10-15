@@ -121,66 +121,43 @@ describe('Player Components', () => {
     expect(useLessonStore.getState().isPlaying).toBe(true);
   });
 
-  it('renders voice selector dropdown in PlayerControls and updates selected voice', () => {
+  it('renders Speak control and allows toggling speech narration in PlayerControls', () => {
     render(<PlayerControls />);
 
-    const voiceSelect = screen.getByRole('combobox', { name: 'Select Voice' });
-    expect(voiceSelect).toBeInTheDocument();
-    expect(voiceSelect).toHaveValue('Puck');
+    const speakBtn = screen.getByRole('button', { name: /Speak Scene|Stop Speech/i });
+    expect(speakBtn).toBeInTheDocument();
 
-    // Change to Fenrir
-    fireEvent.change(voiceSelect, { target: { value: 'Fenrir' } });
-    expect(useLessonStore.getState().selectedVoice).toBe('Fenrir');
+    const autoVoiceBtn = screen.getByRole('button', { name: 'Toggle Auto Speech Narration' });
+    expect(autoVoiceBtn).toBeInTheDocument();
+
+    // Toggle auto-voice on
+    fireEvent.click(autoVoiceBtn);
+    expect(useLessonStore.getState().narrationEnabled).toBe(true);
   });
 
-  it('toggles speech narration mute state via PlayerControls', () => {
+  it('renders duration indicator with estimated timing label in PlayerControls', () => {
     render(<PlayerControls />);
 
-    const narrationBtn = screen.getByRole('button', { name: 'Toggle Speech Narration' });
-    expect(narrationBtn).toBeInTheDocument();
-
-    // Currently not muted -> click mutes
-    fireEvent.click(narrationBtn);
-    expect(useLessonStore.getState().isMuted).toBe(true);
-
-    // Click again unmutes
-    fireEvent.click(narrationBtn);
-    expect(useLessonStore.getState().isMuted).toBe(false);
+    expect(screen.getByText('(est.)')).toBeInTheDocument();
+    expect(screen.getByText('00:00')).toBeInTheDocument();
   });
 
-  it('renders audio loading and error banners in PlayerControls', () => {
-    // 1. Audio Loading banner
-    useLessonStore.getState().setAudioLoading(true);
-    const { rerender } = render(<PlayerControls />);
-    expect(screen.getByText(/Synthesizing scene audio with Gemini TTS/i)).toBeInTheDocument();
-
-    // 2. Audio Error banner
-    useLessonStore.getState().setAudioLoading(false);
-    useLessonStore.getState().setAudioError('TTS provider error 502');
-    rerender(<PlayerControls />);
-    expect(screen.getByText(/TTS provider error 502/i)).toBeInTheDocument();
-
-    // Click caption-only mode button on error banner
-    const captionOnlyBtn = screen.getByRole('button', { name: /Caption-Only Mode/i });
-    fireEvent.click(captionOnlyBtn);
-    expect(useLessonStore.getState().captionOnlyFallback).toBe(true);
-  });
-
-  it('renders voice status pill, loading pill, and caption-only pill in PlayerViewport', () => {
-    // Default: voice pill
+  it('renders narration mode pill in PlayerViewport reflecting speech vs caption mode', () => {
+    // Default: Captions (Est.)
     const { rerender } = render(<PlayerViewport />);
-    expect(screen.getByText(/🎙️/)).toBeInTheDocument();
+    expect(screen.getByText(/Captions \(Est\.\)/i)).toBeInTheDocument();
 
-    // Audio loading pill
-    useLessonStore.getState().setAudioLoading(true);
+    // When browser speech is actively speaking
+    act(() => {
+      useLessonStore.getState().setIsSpeaking(true);
+    });
     rerender(<PlayerViewport />);
-    expect(screen.getByText(/Generating Voice.../i)).toBeInTheDocument();
+    expect(screen.getByText(/Browser Speech/i)).toBeInTheDocument();
 
-    // Caption only fallback pill
-    useLessonStore.getState().setAudioLoading(false);
-    useLessonStore.getState().setCaptionOnlyFallback(true);
-    rerender(<PlayerViewport />);
-    expect(screen.getAllByText(/Caption Only/i).length).toBeGreaterThan(0);
+    // Clean up
+    act(() => {
+      useLessonStore.getState().setIsSpeaking(false);
+    });
   });
 
   it('renders unambiguous playback status badge reflecting accurate player state in PlayerViewport', () => {
@@ -188,35 +165,20 @@ describe('Player Components', () => {
     const { rerender } = render(<PlayerViewport />);
     expect(screen.getByText('PAUSED')).toBeInTheDocument();
 
-    // 2. Synthesizing audio state
+    // 2. Playing state
     act(() => {
-      useLessonStore.getState().setAudioLoading(true);
-    });
-    rerender(<PlayerViewport />);
-    expect(screen.getByText('SYNTHESIZING AUDIO')).toBeInTheDocument();
-
-    // 3. Audio playing state
-    act(() => {
-      useLessonStore.getState().setAudioLoading(false);
       useLessonStore.getState().play();
     });
     rerender(<PlayerViewport />);
     expect(screen.getByText('PLAYING')).toBeInTheDocument();
 
-    // 4. Caption-only playing state
+    // 3. Paused state - never shows PLAYING when paused
     act(() => {
-      useLessonStore.getState().setCaptionOnlyFallback(true);
+      useLessonStore.getState().pause();
     });
     rerender(<PlayerViewport />);
-    expect(screen.getByText('PLAYING (CAPTION ONLY)')).toBeInTheDocument();
-
-    // 5. Audio error state
-    act(() => {
-      useLessonStore.getState().setCaptionOnlyFallback(false);
-      useLessonStore.getState().setAudioError('429 Quota Exceeded');
-    });
-    rerender(<PlayerViewport />);
-    expect(screen.getByText('AUDIO ERROR')).toBeInTheDocument();
+    expect(screen.getByText('PAUSED')).toBeInTheDocument();
+    expect(screen.queryByText('PLAYING')).not.toBeInTheDocument();
   });
 
   it('renders ArchitectureScene with all system pipeline nodes and labels', () => {

@@ -8,15 +8,7 @@ export type VerificationImportance = 'must-know' | 'nice-to-know' | 'caution';
 export type AnimationStyle = 'fade-slide' | 'typewriter' | 'highlight-sweep';
 export type GroundingCategory = 'observed' | 'inferred' | 'needs_verification';
 
-export type VoiceName = 'Puck' | 'Charon' | 'Kore' | 'Fenrir' | 'Aoede';
-
-export type PlaybackStatus =
-  | 'idle'
-  | 'requesting_audio'
-  | 'playing_audio'
-  | 'paused_audio'
-  | 'caption_only'
-  | 'error';
+export type PlaybackStatus = 'idle' | 'playing' | 'paused';
 
 // Request
 export interface LessonRequest {
@@ -25,13 +17,6 @@ export interface LessonRequest {
   language: Language;
   detail_level: DetailLevel;
   use_fixture?: boolean;
-}
-
-export interface NarrationAudioRequest {
-  text: string;
-  language: Language;
-  voice?: VoiceName;
-  is_fixture?: boolean;
 }
 
 // Response models

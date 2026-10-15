@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLessonStore } from '../stores/lessonStore';
-import { useAudioNarration, UseAudioNarrationResult } from './useAudioNarration';
+import { useSpeechNarration, UseSpeechNarrationResult } from './useAudioNarration';
 import {
   calibrateSceneSegments,
   findActiveSegment,
@@ -8,7 +8,7 @@ import {
 } from '../utils/captionTiming';
 
 export interface UseLessonTimelineResult {
-  audio: UseAudioNarrationResult;
+  audio: UseSpeechNarrationResult;
   getSceneDurationMs: () => number;
   segments: TimedNarrationSegment[];
   activeSegment: TimedNarrationSegment | null;
@@ -22,15 +22,10 @@ export function useLessonTimeline(): UseLessonTimelineResult {
     activeSceneIndex,
     isPlaying,
     playbackSpeed,
-    isMuted,
-    narrationEnabled,
-    captionOnlyFallback,
     activeSceneDurationMs,
-    audioLoading,
     seekTargetMs,
     captionsEnabled,
     getCurrentScene,
-    getPlaybackStatus,
     setSceneElapsedMs,
     setCurrentCaptionText,
     setActiveHighlightTerm,
@@ -40,16 +35,15 @@ export function useLessonTimeline(): UseLessonTimelineResult {
     nextScene,
   } = useLessonStore();
 
-  const audio = useAudioNarration();
+  const speech = useSpeechNarration();
   const animationFrameRef = useRef<number | null>(null);
   const lastClockTimeRef = useRef<number>(performance.now());
   const sceneElapsedMsRef = useRef<number>(0);
   const sceneFinishedRef = useRef<boolean>(false);
 
   const scene = getCurrentScene();
-  const playbackStatus = getPlaybackStatus();
 
-  // Compute scene duration: prioritize actual decoded audio duration, then captions, then word-count estimate
+  // Compute scene duration based on schema captions or language-specific word count
   const getSceneDurationMs = useCallback((): number => {
     if (activeSceneDurationMs && activeSceneDurationMs > 0) {
       return activeSceneDurationMs;
@@ -59,10 +53,11 @@ export function useLessonTimeline(): UseLessonTimelineResult {
       const lastCaption = scene.captions[scene.captions.length - 1];
       return Math.max(lastCaption.offset_ms + lastCaption.duration_ms, 4000);
     }
-    // Fallback: estimate from narration word count (~125 wpm)
-    const words = scene.narration_text.split(/\s+/).length;
-    return Math.max(Math.round((words / 125) * 60 * 1000), 4000);
-  }, [activeSceneDurationMs, scene]);
+    // Estimated narration duration based on word pace
+    const words = scene.narration_text.split(/\s+/).filter(Boolean).length;
+    const wpm = lesson?.language === 'hi' ? 110 : 125;
+    return Math.max(Math.round((words / wpm) * 60 * 1000), 4000);
+  }, [activeSceneDurationMs, scene, lesson?.language]);
 
   const durationMs = getSceneDurationMs();
 
@@ -88,8 +83,7 @@ export function useLessonTimeline(): UseLessonTimelineResult {
   useEffect(() => {
     if (seekTargetMs === null) return;
 
-    const targetSec = seekTargetMs / 1000;
-    audio.seekTo(targetSec);
+    speech.stopSpeech();
     sceneElapsedMsRef.current = seekTargetMs;
     setSceneElapsedMs(seekTargetMs);
 
@@ -105,7 +99,7 @@ export function useLessonTimeline(): UseLessonTimelineResult {
     clearSeekTarget();
   }, [
     seekTargetMs,
-    audio,
+    speech,
     segments,
     captionsEnabled,
     setSceneElapsedMs,
@@ -139,7 +133,7 @@ export function useLessonTimeline(): UseLessonTimelineResult {
     setActiveHighlightTerm,
   ]);
 
-  // Unified master reference clock & coordinated synchronization loop
+  // High-precision timeline clock driving coordinated animation and caption rendering
   useEffect(() => {
     if (!isPlaying || !lesson) {
       if (animationFrameRef.current) {
@@ -153,33 +147,13 @@ export function useLessonTimeline(): UseLessonTimelineResult {
 
     lastClockTimeRef.current = performance.now();
 
-    const isAudioActive =
-      playbackStatus === 'playing_audio' &&
-      audio.audioElement !== null &&
-      audio.audioElement.src !== '' &&
-      !audio.audioElement.error;
-
     const tick = () => {
-      let effectiveElapsed = 0;
+      const now = performance.now();
+      const delta = (now - lastClockTimeRef.current) * playbackSpeed;
+      lastClockTimeRef.current = now;
 
-      if (isAudioActive && audio.audioElement && Number.isFinite(audio.audioElement.currentTime)) {
-        // Master clock: driven directly by HTMLAudioElement playback position
-        effectiveElapsed = Math.min(audio.audioElement.currentTime * 1000, durationMs);
-        sceneElapsedMsRef.current = effectiveElapsed;
-        lastClockTimeRef.current = performance.now();
-      } else if (playbackStatus === 'caption_only') {
-        // Fallback timer clock for caption-only mode or muted playback
-        const now = performance.now();
-        const delta = (now - lastClockTimeRef.current) * playbackSpeed;
-        lastClockTimeRef.current = now;
-        effectiveElapsed = Math.min(sceneElapsedMsRef.current + delta, durationMs);
-        sceneElapsedMsRef.current = effectiveElapsed;
-      } else {
-        // Audio is currently buffering, synthesizing, or errored: pause clock progress
-        lastClockTimeRef.current = performance.now();
-        effectiveElapsed = sceneElapsedMsRef.current;
-      }
-
+      const effectiveElapsed = Math.min(sceneElapsedMsRef.current + delta, durationMs);
+      sceneElapsedMsRef.current = effectiveElapsed;
       setSceneElapsedMs(effectiveElapsed);
 
       // Coordinate active caption and visual highlighted term
@@ -197,10 +171,8 @@ export function useLessonTimeline(): UseLessonTimelineResult {
 
       if (isComplete && !sceneFinishedRef.current) {
         sceneFinishedRef.current = true;
-        const advanced = nextScene();
-        if (!advanced) {
-          audio.stopAudio();
-        }
+        speech.stopSpeech();
+        nextScene();
         return;
       }
 
@@ -217,14 +189,9 @@ export function useLessonTimeline(): UseLessonTimelineResult {
     };
   }, [
     isPlaying,
-    playbackStatus,
     activeChapterIndex,
     activeSceneIndex,
     playbackSpeed,
-    isMuted,
-    narrationEnabled,
-    captionOnlyFallback,
-    audioLoading,
     durationMs,
     lesson,
     captionsEnabled,
@@ -235,11 +202,11 @@ export function useLessonTimeline(): UseLessonTimelineResult {
     setActiveSegmentIndex,
     setActiveHighlightTerm,
     nextScene,
-    audio,
+    speech,
   ]);
 
   return {
-    audio,
+    audio: speech,
     getSceneDurationMs,
     segments,
     activeSegment,

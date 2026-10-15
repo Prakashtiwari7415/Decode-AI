@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Lesson, Chapter, Scene, VoiceName, PlaybackStatus } from '../types/lesson';
+import { Lesson, Chapter, Scene, PlaybackStatus } from '../types/lesson';
 
 export interface LessonState {
   lesson: Lesson | null;
@@ -14,16 +14,13 @@ export interface LessonState {
   activeHighlightTerm: string | null;
   checkedVerificationIds: Record<string, boolean>;
 
-  // Milestone 3 Audio & Narration State
-  selectedVoice: VoiceName;
+  // Speech Narration State (Browser Web Speech API)
   narrationEnabled: boolean;
-  audioLoading: boolean;
-  audioError: string | null;
-  retryAfterSeconds: number | null;
-  captionOnlyFallback: boolean;
+  isSpeaking: boolean;
+  speechSupported: boolean;
   activeSceneDurationMs: number | null;
 
-  // Milestone 4 Synchronized Playback & Seeking State
+  // Synchronized Playback & Seeking State
   activeSegmentIndex: number;
   seekTargetMs: number | null;
 
@@ -52,30 +49,24 @@ export interface LessonState {
   setActiveHighlightTerm: (term: string | null) => void;
   toggleVerificationItem: (id: string) => void;
 
-  // Milestone 3 Audio Actions
-  setSelectedVoice: (voice: VoiceName) => void;
+  // Speech Narration Actions
   setNarrationEnabled: (enabled: boolean) => void;
   toggleNarration: () => void;
-  setAudioLoading: (loading: boolean) => void;
-  setAudioError: (error: string | null) => void;
-  setRetryAfterSeconds: (seconds: number | null) => void;
-  setCaptionOnlyFallback: (fallback: boolean) => void;
+  setIsSpeaking: (isSpeaking: boolean) => void;
+  setSpeechSupported: (supported: boolean) => void;
   setActiveSceneDurationMs: (ms: number | null) => void;
   reset: () => void;
 
-  // Milestone 4 Actions
+  // Synchronized Playback Actions
   setActiveSegmentIndex: (index: number) => void;
   seekSceneMs: (targetMs: number) => void;
   clearSeekTarget: () => void;
 }
 
-const initialAudioState = {
-  selectedVoice: 'Puck' as VoiceName,
-  narrationEnabled: true,
-  audioLoading: false,
-  audioError: null as string | null,
-  retryAfterSeconds: null as number | null,
-  captionOnlyFallback: false,
+const initialSpeechState = {
+  narrationEnabled: false,
+  isSpeaking: false,
+  speechSupported: true,
   activeSceneDurationMs: null,
   activeSegmentIndex: 0,
   seekTargetMs: null as number | null,
@@ -93,7 +84,7 @@ export const useLessonStore = create<LessonState>((set, get) => ({
   currentCaptionText: '',
   activeHighlightTerm: null,
   checkedVerificationIds: {},
-  ...initialAudioState,
+  ...initialSpeechState,
 
   getCurrentChapter: () => {
     const { lesson, activeChapterIndex } = get();
@@ -125,14 +116,9 @@ export const useLessonStore = create<LessonState>((set, get) => ({
   },
 
   getPlaybackStatus: (): PlaybackStatus => {
-    const { lesson, audioLoading, audioError, captionOnlyFallback, narrationEnabled, isMuted, isPlaying } = get();
+    const { lesson, isPlaying } = get();
     if (!lesson) return 'idle';
-    if (audioLoading) return 'requesting_audio';
-    if (audioError && !captionOnlyFallback) return 'error';
-    if (captionOnlyFallback || !narrationEnabled || isMuted) {
-      return isPlaying ? 'caption_only' : 'paused_audio';
-    }
-    return isPlaying ? 'playing_audio' : 'paused_audio';
+    return isPlaying ? 'playing' : 'paused';
   },
 
   setLesson: (lesson: Lesson | null) => {
@@ -145,7 +131,7 @@ export const useLessonStore = create<LessonState>((set, get) => ({
       currentCaptionText: '',
       activeHighlightTerm: null,
       checkedVerificationIds: {},
-      ...initialAudioState,
+      ...initialSpeechState,
     });
   },
 
@@ -165,7 +151,7 @@ export const useLessonStore = create<LessonState>((set, get) => ({
       activeSegmentIndex: 0,
       seekTargetMs: null,
       activeSceneDurationMs: null,
-      audioError: null,
+      isSpeaking: false,
       isPlaying: true,
     });
   },
@@ -184,7 +170,7 @@ export const useLessonStore = create<LessonState>((set, get) => ({
         activeSegmentIndex: 0,
         seekTargetMs: null,
         activeSceneDurationMs: null,
-        audioError: null,
+        isSpeaking: false,
       });
       return true;
     }
@@ -199,13 +185,13 @@ export const useLessonStore = create<LessonState>((set, get) => ({
         activeSegmentIndex: 0,
         seekTargetMs: null,
         activeSceneDurationMs: null,
-        audioError: null,
+        isSpeaking: false,
       });
       return true;
     }
 
     // Reached the end of the lesson
-    set({ isPlaying: false, sceneElapsedMs: 0, activeHighlightTerm: null });
+    set({ isPlaying: false, sceneElapsedMs: 0, activeHighlightTerm: null, isSpeaking: false });
     return false;
   },
 
@@ -222,7 +208,7 @@ export const useLessonStore = create<LessonState>((set, get) => ({
         activeSegmentIndex: 0,
         seekTargetMs: null,
         activeSceneDurationMs: null,
-        audioError: null,
+        isSpeaking: false,
       });
       return true;
     }
@@ -238,7 +224,7 @@ export const useLessonStore = create<LessonState>((set, get) => ({
         activeSegmentIndex: 0,
         seekTargetMs: null,
         activeSceneDurationMs: null,
-        audioError: null,
+        isSpeaking: false,
       });
       return true;
     }
@@ -258,7 +244,7 @@ export const useLessonStore = create<LessonState>((set, get) => ({
       activeSegmentIndex: 0,
       seekTargetMs: null,
       activeSceneDurationMs: null,
-      audioError: null,
+      isSpeaking: false,
     });
   },
 
@@ -277,7 +263,7 @@ export const useLessonStore = create<LessonState>((set, get) => ({
       activeSegmentIndex: 0,
       seekTargetMs: null,
       activeSceneDurationMs: null,
-      audioError: null,
+      isSpeaking: false,
     });
   },
 
@@ -301,25 +287,19 @@ export const useLessonStore = create<LessonState>((set, get) => ({
       },
     })),
 
-  // Milestone 3 Audio Actions
-  setSelectedVoice: (selectedVoice: VoiceName) => set({ selectedVoice }),
-
+  // Speech Narration Actions
   setNarrationEnabled: (narrationEnabled: boolean) => set({ narrationEnabled }),
 
   toggleNarration: () => set((state) => ({ narrationEnabled: !state.narrationEnabled })),
 
-  setAudioLoading: (audioLoading: boolean) => set({ audioLoading }),
+  setIsSpeaking: (isSpeaking: boolean) => set({ isSpeaking }),
 
-  setAudioError: (audioError: string | null) => set({ audioError }),
-
-  setRetryAfterSeconds: (retryAfterSeconds: number | null) => set({ retryAfterSeconds }),
-
-  setCaptionOnlyFallback: (captionOnlyFallback: boolean) => set({ captionOnlyFallback }),
+  setSpeechSupported: (speechSupported: boolean) => set({ speechSupported }),
 
   setActiveSceneDurationMs: (activeSceneDurationMs: number | null) =>
     set({ activeSceneDurationMs }),
 
-  // Milestone 4 Actions
+  // Synchronized Playback Actions
   setActiveSegmentIndex: (activeSegmentIndex: number) => set({ activeSegmentIndex }),
 
   seekSceneMs: (targetMs: number) => {
@@ -345,6 +325,6 @@ export const useLessonStore = create<LessonState>((set, get) => ({
       currentCaptionText: '',
       activeHighlightTerm: null,
       checkedVerificationIds: {},
-      ...initialAudioState,
+      ...initialSpeechState,
     }),
 }));

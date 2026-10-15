@@ -1,39 +1,76 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { useLessonStore } from '../stores/lessonStore';
-import { fetchSceneNarrationAudio, ApiError } from '../services/api';
-
-interface CachedAudio {
-  blob: Blob;
-  url: string;
-  durationMs: number;
-}
-
-// Module-level audio cache preserving synthesized audio across component re-renders
-const globalAudioCache = new Map<string, CachedAudio>();
+import { Language } from '../types/lesson';
 
 /**
- * Resets the in-memory client audio cache (useful for tests).
+ * Checks if the browser supports the Web Speech API (speechSynthesis).
  */
-export function clearClientAudioCache(): void {
-  globalAudioCache.forEach((cached) => {
-    try {
-      URL.revokeObjectURL(cached.url);
-    } catch {
-      // Ignore URL revocation errors
-    }
-  });
-  globalAudioCache.clear();
+export function isSpeechSynthesisSupported(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    'speechSynthesis' in window &&
+    typeof SpeechSynthesisUtterance !== 'undefined'
+  );
 }
 
-export interface UseAudioNarrationResult {
+/**
+ * Maps lesson language to standard BCP-47 language codes.
+ */
+export function getLanguageCode(language: Language): string {
+  switch (language) {
+    case 'hi':
+      return 'hi-IN';
+    case 'hinglish':
+      return 'hi-IN';
+    case 'en':
+    default:
+      return 'en-US';
+  }
+}
+
+/**
+ * Finds the most suitable installed browser speech synthesis voice for the requested language.
+ */
+export function findBestVoice(
+  voices: SpeechSynthesisVoice[],
+  language: Language
+): SpeechSynthesisVoice | null {
+  if (!voices || voices.length === 0) return null;
+
+  const targetPrefix = language === 'hi' ? 'hi' : language === 'hinglish' ? 'hi' : 'en';
+
+  // 1. Direct language code match
+  const match = voices.find((v) => v.lang.toLowerCase().startsWith(targetPrefix));
+  if (match) return match;
+
+  // 2. Hinglish fallback: Indian English (en-IN)
+  if (language === 'hinglish') {
+    const enIn = voices.find(
+      (v) =>
+        v.lang.toLowerCase().includes('en-in') ||
+        v.lang.toLowerCase().includes('en_in')
+    );
+    if (enIn) return enIn;
+  }
+
+  // 3. Fallback to default voice or first available
+  return voices.find((v) => v.default) || voices[0] || null;
+}
+
+export interface UseSpeechNarrationResult {
+  isSupported: boolean;
+  isSpeaking: boolean;
+  speakCurrentScene: () => void;
+  stopSpeech: () => void;
+  toggleSpeech: () => void;
+  // Backwards-compatible aliases for lesson timeline
   audioElement: HTMLAudioElement | null;
-  retry: () => Promise<void>;
   seekTo: (timeSeconds: number) => void;
   restartAudio: () => void;
   stopAudio: () => void;
 }
 
-export function useAudioNarration(): UseAudioNarrationResult {
+export function useSpeechNarration(): UseSpeechNarrationResult {
   const {
     lesson,
     activeChapterIndex,
@@ -42,268 +79,210 @@ export function useAudioNarration(): UseAudioNarrationResult {
     playbackSpeed,
     isMuted,
     narrationEnabled,
-    selectedVoice,
-    audioLoading,
-    captionOnlyFallback,
     getCurrentScene,
-    setAudioLoading,
-    setAudioError,
-    setRetryAfterSeconds,
-    setCaptionOnlyFallback,
-    setActiveSceneDurationMs,
+    setIsSpeaking,
+    setSpeechSupported,
   } = useLessonStore();
 
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const [supported, setSupported] = useState<boolean>(false);
+  const [speaking, setSpeaking] = useState<boolean>(false);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
 
-  // Mutable refs to decouple play/mute state from audio fetch dependencies
+  const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+
+  // Mutable refs to decouple effect dependencies
   const isPlayingRef = useRef<boolean>(isPlaying);
   isPlayingRef.current = isPlaying;
   const isMutedRef = useRef<boolean>(isMuted);
   isMutedRef.current = isMuted;
-  const playbackSpeedRef = useRef<number>(playbackSpeed);
-  playbackSpeedRef.current = playbackSpeed;
   const narrationEnabledRef = useRef<boolean>(narrationEnabled);
   narrationEnabledRef.current = narrationEnabled;
+  const playbackSpeedRef = useRef<number>(playbackSpeed);
+  playbackSpeedRef.current = playbackSpeed;
 
-  // Initialize audio element once
+  // Check Web Speech API availability and load voices
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const audio = new Audio();
-      audio.preload = 'auto';
-      audioRef.current = audio;
-    }
+    const isAvail = isSpeechSynthesisSupported();
+    setSupported(isAvail);
+    setSpeechSupported(isAvail);
 
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.src = '';
-        audioRef.current = null;
-      }
-    };
-  }, []);
+    if (!isAvail) return;
 
-  const getCacheKey = useCallback(
-    (sceneId: string, text: string): string => {
-      const lang = lesson?.language || 'en';
-      return `${lang}:${selectedVoice}:${sceneId}:${text.trim().slice(0, 100)}`;
-    },
-    [lesson?.language, selectedVoice]
-  );
+    const synth = window.speechSynthesis;
 
-  const stopAudio = useCallback(() => {
-    const audio = audioRef.current;
-    if (audio) {
-      audio.pause();
-      audio.currentTime = 0;
-    }
-  }, []);
-
-  const seekTo = useCallback((timeSeconds: number) => {
-    const audio = audioRef.current;
-    if (audio && Number.isFinite(timeSeconds)) {
-      audio.currentTime = Math.max(0, timeSeconds);
-    }
-  }, []);
-
-  const restartAudio = useCallback(() => {
-    const audio = audioRef.current;
-    if (audio) {
-      audio.currentTime = 0;
-      if (isPlayingRef.current && narrationEnabledRef.current && !isMutedRef.current && !captionOnlyFallback) {
-        audio.play().catch(() => {});
-      }
-    }
-  }, [captionOnlyFallback]);
-
-  // Load and cache audio whenever active scene, voice, or language changes
-  const loadAudioForCurrentScene = useCallback(
-    async (forceRefresh = false) => {
-      const scene = getCurrentScene();
-      const audio = audioRef.current;
-      if (!lesson || !scene || !audio) return;
-
-      // Immediately abort prior pending fetch and silence prior audio
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-      abortControllerRef.current = new AbortController();
-      const signal = abortControllerRef.current.signal;
-
-      audio.pause();
-      audio.currentTime = 0;
-
-      // If narration is disabled by user, skip audio fetch
-      if (!narrationEnabledRef.current) {
-        setAudioLoading(false);
-        setAudioError(null);
-        return;
-      }
-
-      const cacheKey = getCacheKey(scene.scene_id, scene.narration_text);
-      const cached = globalAudioCache.get(cacheKey);
-
-      if (cached && !forceRefresh) {
-        audio.src = cached.url;
-        audio.playbackRate = playbackSpeedRef.current;
-        setActiveSceneDurationMs(cached.durationMs);
-        setAudioLoading(false);
-        setAudioError(null);
-        setCaptionOnlyFallback(false);
-
-        if (isPlayingRef.current && !isMutedRef.current && narrationEnabledRef.current) {
-          audio.play().catch(() => {});
-        }
-        return;
-      }
-
-      setAudioLoading(true);
-      setAudioError(null);
-
-      const isFixture = Boolean(
-        lesson.lesson_id.includes('fixture') ||
-        (lesson.gemini_model_version && lesson.gemini_model_version.includes('fixture'))
-      );
-
+    const updateVoices = () => {
       try {
-        const blob = await fetchSceneNarrationAudio(
-          {
-            text: scene.narration_text,
-            language: lesson.language,
-            voice: selectedVoice,
-            is_fixture: isFixture,
-          },
-          signal
-        );
-
-        if (signal.aborted) return;
-
-        const objectUrl = URL.createObjectURL(blob);
-        audio.src = objectUrl;
-        audio.playbackRate = playbackSpeedRef.current;
-
-        // Decode exact duration from the loaded audio buffer
-        const durationMs = await new Promise<number>((resolve) => {
-          const onLoaded = () => {
-            audio.removeEventListener('loadedmetadata', onLoaded);
-            const durSec = audio.duration;
-            if (Number.isFinite(durSec) && durSec > 0) {
-              resolve(Math.round(durSec * 1000));
-            } else {
-              resolve(Math.max(4000, Math.round((scene.narration_text.split(/\s+/).length / 125) * 60 * 1000)));
-            }
-          };
-
-          if (audio.readyState >= 1 && Number.isFinite(audio.duration) && audio.duration > 0) {
-            resolve(Math.round(audio.duration * 1000));
-          } else {
-            audio.addEventListener('loadedmetadata', onLoaded);
-            setTimeout(() => {
-              audio.removeEventListener('loadedmetadata', onLoaded);
-              resolve(Math.max(4000, Math.round((scene.narration_text.split(/\s+/).length / 125) * 60 * 1000)));
-            }, 3000);
-          }
-        });
-
-        if (signal.aborted) {
-          try {
-            URL.revokeObjectURL(objectUrl);
-          } catch {}
-          return;
-        }
-
-        globalAudioCache.set(cacheKey, {
-          blob,
-          url: objectUrl,
-          durationMs,
-        });
-
-        setActiveSceneDurationMs(durationMs);
-        setAudioLoading(false);
-        setAudioError(null);
-        setCaptionOnlyFallback(false);
-
-        if (isPlayingRef.current && !isMutedRef.current && narrationEnabledRef.current) {
-          audio.play().catch(() => {});
-        }
-      } catch (err: unknown) {
-        if (signal.aborted || (err instanceof Error && err.name === 'AbortError')) {
-          return;
-        }
-
-        const is429 = err instanceof ApiError && err.status === 429;
-        let message = 'Failed to synthesize narration audio.';
-
-        if (is429) {
-          const retrySec = (err as ApiError).retryAfter ?? 10;
-          setRetryAfterSeconds(retrySec);
-          message = `Gemini TTS rate limit/quota reached. Please retry in ${retrySec}s or continue in Caption-Only mode.`;
-        } else if (err instanceof ApiError) {
-          message = err.detail;
-        } else if (err instanceof Error) {
-          message = err.message;
-        }
-
-        setAudioError(message);
-        setAudioLoading(false);
-        setCaptionOnlyFallback(true);
-        setActiveSceneDurationMs(null);
-      }
-    },
-    [
-      lesson,
-      getCurrentScene,
-      selectedVoice,
-      getCacheKey,
-      setActiveSceneDurationMs,
-      setAudioLoading,
-      setAudioError,
-      setRetryAfterSeconds,
-      setCaptionOnlyFallback,
-    ]
-  );
-
-  // Trigger audio loading strictly on scene, voice, or language transition
-  useEffect(() => {
-    loadAudioForCurrentScene();
-
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
+        const available = synth.getVoices();
+        setVoices(available);
+      } catch {
+        // Ignore voice loading exceptions
       }
     };
-  }, [lesson?.lesson_id, activeChapterIndex, activeSceneIndex, selectedVoice, narrationEnabled, loadAudioForCurrentScene]);
 
-  // Synchronize play/pause state and playback speed
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
+    updateVoices();
 
-    audio.playbackRate = playbackSpeed;
+    if ('onvoiceschanged' in synth) {
+      synth.addEventListener('voiceschanged', updateVoices);
+    }
 
-    if (isPlaying && narrationEnabled && !isMuted && !captionOnlyFallback && !audioLoading) {
-      if (audio.paused && audio.src) {
-        audio.play().catch(() => {});
+    return () => {
+      if ('onvoiceschanged' in synth) {
+        synth.removeEventListener('voiceschanged', updateVoices);
       }
+      try {
+        synth.cancel();
+      } catch {}
+    };
+  }, [setSpeechSupported]);
+
+  // Cancel any active speech synthesis and clean up handlers
+  const stopSpeech = useCallback(() => {
+    if (isSpeechSynthesisSupported()) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {}
+    }
+    if (activeUtteranceRef.current) {
+      activeUtteranceRef.current.onstart = null;
+      activeUtteranceRef.current.onend = null;
+      activeUtteranceRef.current.onerror = null;
+      activeUtteranceRef.current = null;
+    }
+    setSpeaking(false);
+    setIsSpeaking(false);
+  }, [setIsSpeaking]);
+
+  // Speak the current scene's narration text using Web Speech API
+  const speakCurrentScene = useCallback(() => {
+    if (!isSpeechSynthesisSupported()) return;
+
+    const scene = getCurrentScene();
+    if (!lesson || !scene || !scene.narration_text.trim()) return;
+
+    const synth = window.speechSynthesis;
+
+    // Always cancel pending/current speech to prevent overlapping speech
+    try {
+      synth.cancel();
+    } catch {}
+
+    const utterance = new SpeechSynthesisUtterance(scene.narration_text);
+    activeUtteranceRef.current = utterance;
+
+    // Configure rate, language, and voice
+    const speed = playbackSpeedRef.current;
+    utterance.rate = Math.max(0.5, Math.min(2.0, speed));
+    utterance.lang = getLanguageCode(lesson.language);
+
+    const bestVoice = findBestVoice(voices, lesson.language);
+    if (bestVoice) {
+      utterance.voice = bestVoice;
+    }
+
+    utterance.onstart = () => {
+      setSpeaking(true);
+      setIsSpeaking(true);
+    };
+
+    utterance.onend = () => {
+      setSpeaking(false);
+      setIsSpeaking(false);
+      activeUtteranceRef.current = null;
+    };
+
+    utterance.onerror = (event) => {
+      // Ignore user-initiated cancellation or interruption
+      if (event.error !== 'canceled' && event.error !== 'interrupted') {
+        console.warn('SpeechSynthesis error:', event.error);
+      }
+      setSpeaking(false);
+      setIsSpeaking(false);
+      activeUtteranceRef.current = null;
+    };
+
+    try {
+      synth.speak(utterance);
+    } catch {
+      setSpeaking(false);
+      setIsSpeaking(false);
+    }
+  }, [getCurrentScene, lesson, voices, setIsSpeaking]);
+
+  const toggleSpeech = useCallback(() => {
+    if (speaking) {
+      stopSpeech();
     } else {
-      if (!audio.paused) {
-        audio.pause();
+      speakCurrentScene();
+    }
+  }, [speaking, stopSpeech, speakCurrentScene]);
+
+  // Cancel speech on scene or lesson change; auto-speak if playback & narration are active
+  useEffect(() => {
+    stopSpeech();
+
+    if (
+      isPlayingRef.current &&
+      narrationEnabledRef.current &&
+      !isMutedRef.current &&
+      isSpeechSynthesisSupported()
+    ) {
+      speakCurrentScene();
+    }
+
+    return () => {
+      stopSpeech();
+    };
+  }, [
+    lesson?.lesson_id,
+    activeChapterIndex,
+    activeSceneIndex,
+    stopSpeech,
+    speakCurrentScene,
+  ]);
+
+  // Handle play/pause and mute transitions cleanly
+  const prevIsPlayingRef = useRef<boolean>(isPlaying);
+  useEffect(() => {
+    if (prevIsPlayingRef.current && !isPlaying) {
+      stopSpeech();
+    } else if (!prevIsPlayingRef.current && isPlaying) {
+      if (narrationEnabled && !isMuted) {
+        speakCurrentScene();
       }
     }
-  }, [isPlaying, playbackSpeed, isMuted, narrationEnabled, captionOnlyFallback, audioLoading]);
+    prevIsPlayingRef.current = isPlaying;
+  }, [isPlaying, narrationEnabled, isMuted, stopSpeech, speakCurrentScene]);
 
-  const retry = useCallback(async () => {
-    await loadAudioForCurrentScene(true);
-  }, [loadAudioForCurrentScene]);
+  const prevIsMutedRef = useRef<boolean>(isMuted);
+  useEffect(() => {
+    if (!prevIsMutedRef.current && isMuted) {
+      stopSpeech();
+    }
+    prevIsMutedRef.current = isMuted;
+  }, [isMuted, stopSpeech]);
 
   return {
-    audioElement: audioRef.current,
-    retry,
-    seekTo,
-    restartAudio,
-    stopAudio,
+    isSupported: supported,
+    isSpeaking: speaking,
+    speakCurrentScene,
+    stopSpeech,
+    toggleSpeech,
+    // Backwards-compatible aliases
+    audioElement: null,
+    seekTo: () => {
+      // Seeking stops speech to prevent desync
+      stopSpeech();
+    },
+    restartAudio: () => {
+      stopSpeech();
+      if (isPlayingRef.current && narrationEnabledRef.current && !isMutedRef.current) {
+        speakCurrentScene();
+      }
+    },
+    stopAudio: stopSpeech,
   };
 }
+
+// Backwards-compatibility alias for timeline hook and player
+export const useAudioNarration = useSpeechNarration;
+export type UseAudioNarrationResult = UseSpeechNarrationResult;

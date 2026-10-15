@@ -26,11 +26,10 @@ export function splitIntoSentences(text: string): string[] {
 }
 
 /**
- * Calibrates scene caption slices against actual decoded audio duration.
+ * Calibrates scene caption slices against estimated scene duration.
  *
- * Gemini TTS provides audio bytes without word-level timestamps.
  * This calibration engine produces contiguous, non-overlapping sentence-level
- * segments partitioning [0, actualDurationMs] proportionally to character weights,
+ * segments partitioning [0, targetDurationMs] proportionally to character weights,
  * eliminating dead zones, gaps, and premature subtitle cutoffs.
  */
 export function calibrateSceneSegments(

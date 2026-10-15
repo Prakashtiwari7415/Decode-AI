@@ -1,20 +1,12 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo } from 'react';
 import { useLessonStore } from '../../stores/lessonStore';
-import { VoiceName } from '../../types/lesson';
+import { useSpeechNarration } from '../../hooks/useAudioNarration';
 import { ProgressBar } from './ProgressBar';
 
 interface PlayerControlsProps {
   onToggleFullscreen?: () => void;
   isFullscreen?: boolean;
 }
-
-const PREBUILT_VOICES: { id: VoiceName; label: string; desc: string }[] = [
-  { id: 'Puck', label: 'Puck', desc: 'Clear & Engaging (Standard)' },
-  { id: 'Kore', label: 'Kore', desc: 'Natural & Balanced' },
-  { id: 'Charon', label: 'Charon', desc: 'Deep & Informative' },
-  { id: 'Fenrir', label: 'Fenrir', desc: 'Authoritative & Energetic' },
-  { id: 'Aoede', label: 'Aoede', desc: 'Bright & Articulate' },
-];
 
 export const PlayerControls: React.FC<PlayerControlsProps> = ({
   onToggleFullscreen,
@@ -27,12 +19,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
     playbackSpeed,
     isMuted,
     captionsEnabled,
-    selectedVoice,
     narrationEnabled,
-    audioLoading,
-    audioError,
-    retryAfterSeconds,
-    captionOnlyFallback,
     sceneElapsedMs,
     activeSceneDurationMs,
     getCurrentScene,
@@ -44,35 +31,11 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
     selectChapter,
     toggleMute,
     toggleCaptions,
+    toggleNarration,
     setPlaybackSpeed,
-    setSelectedVoice,
-    setNarrationEnabled,
-    setAudioError,
-    setRetryAfterSeconds,
-    setCaptionOnlyFallback,
   } = useLessonStore();
 
-  const [cooldownRemaining, setCooldownRemaining] = useState<number>(0);
-
-  // Handle countdown timer when backend returns Retry-After
-  useEffect(() => {
-    if (retryAfterSeconds && retryAfterSeconds > 0) {
-      setCooldownRemaining(retryAfterSeconds);
-      const timer = setInterval(() => {
-        setCooldownRemaining((prev) => {
-          if (prev <= 1) {
-            clearInterval(timer);
-            setRetryAfterSeconds(null);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-      return () => clearInterval(timer);
-    } else {
-      setCooldownRemaining(0);
-    }
-  }, [retryAfterSeconds, setRetryAfterSeconds]);
+  const { isSupported, isSpeaking, toggleSpeech } = useSpeechNarration();
 
   const currentScene = getCurrentScene();
   const currentSceneDurationMs = useMemo(() => {
@@ -84,9 +47,10 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
       const last = currentScene.captions[currentScene.captions.length - 1];
       return Math.max(last.offset_ms + last.duration_ms, 4000);
     }
-    const words = currentScene.narration_text.split(/\s+/).length;
-    return Math.max(Math.round((words / 125) * 60 * 1000), 4000);
-  }, [activeSceneDurationMs, currentScene]);
+    const words = currentScene.narration_text.split(/\s+/).filter(Boolean).length;
+    const wpm = lesson?.language === 'hi' ? 110 : 125;
+    return Math.max(Math.round((words / wpm) * 60 * 1000), 4000);
+  }, [activeSceneDurationMs, currentScene, lesson?.language]);
 
   const canGoPrevChapter = activeChapterIndex > 0;
   const canGoNextChapter = lesson ? activeChapterIndex < lesson.chapters.length - 1 : false;
@@ -105,53 +69,6 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
 
   return (
     <div className="w-full bg-slate-900/95 border-t border-slate-800 px-4 py-3 rounded-b-xl space-y-2 select-none">
-      {/* Audio Loading & Error Notifications */}
-      {audioLoading && (
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-950/60 border border-indigo-800/60 text-xs text-indigo-300">
-          <svg className="animate-spin h-3.5 w-3.5 text-cyan-400 shrink-0" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-          </svg>
-          <span>Synthesizing scene audio with Gemini TTS ({selectedVoice})...</span>
-        </div>
-      )}
-
-      {audioError && !audioLoading && (
-        <div className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-amber-950/50 border border-amber-800/60 text-xs text-amber-200 flex-wrap">
-          <div className="flex items-center gap-2 overflow-hidden min-w-[200px]">
-            <span>ℹ️</span>
-            <span className="truncate">{audioError}</span>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              disabled={cooldownRemaining > 0}
-              onClick={() => {
-                setAudioError(null);
-                setCaptionOnlyFallback(false);
-                setNarrationEnabled(true);
-                // Trigger scene re-fetch by toggling voice or scene reload
-                const currentVoice = selectedVoice;
-                setSelectedVoice(currentVoice);
-              }}
-              className="px-2.5 py-1 rounded bg-amber-900/60 hover:bg-amber-800 disabled:opacity-50 disabled:cursor-not-allowed text-[11px] text-amber-100 font-medium transition-colors"
-              title={cooldownRemaining > 0 ? `Wait ${cooldownRemaining}s before retrying` : 'Retry Gemini TTS'}
-            >
-              {cooldownRemaining > 0 ? `Retry Audio (${cooldownRemaining}s)` : 'Retry Audio'}
-            </button>
-            <button
-              onClick={() => {
-                setAudioError(null);
-                setCaptionOnlyFallback(true);
-              }}
-              className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 transition-colors flex items-center gap-1"
-              title="Continue lesson in Caption-Only mode"
-            >
-              <span>💬</span> Caption-Only Mode
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Progress Bar */}
       <ProgressBar />
 
@@ -259,86 +176,89 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
             +5s
           </button>
 
-          {/* Duration Indicator */}
+          {/* Duration Indicator with Estimated Label */}
           <div className="text-xs font-mono text-slate-400 pl-1.5 flex items-center gap-1">
             <span className="text-slate-200 font-semibold">{formatTime(sceneElapsedMs / 1000)}</span>
             <span className="text-slate-600">/</span>
             <span>{formatTime(currentSceneDurationMs / 1000)}</span>
+            <span
+              className="px-1 py-0.5 rounded bg-slate-800/80 text-[10px] text-slate-400 font-sans font-medium"
+              title="Scene timing is estimated proportionally from narration word pace and caption markers"
+            >
+              (est.)
+            </span>
             <span className="text-slate-600 ml-1 hidden md:inline">({totalDurationStr} total)</span>
           </div>
         </div>
 
-        {/* Right Side: Voice Selector, Audio Toggle, Captions & Speed */}
+        {/* Right Side: Browser Speech Controls, Captions & Speed */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Prebuilt Voice Selection Dropdown */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] uppercase font-bold text-slate-400 hidden lg:inline">Voice:</span>
-            <select
-              value={selectedVoice}
-              onChange={(e) => setSelectedVoice(e.target.value as VoiceName)}
-              className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-decodeai-primary font-medium cursor-pointer"
-              title="Select Gemini Prebuilt Voice"
-              aria-label="Select Voice"
-            >
-              {PREBUILT_VOICES.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Web Speech API: Speak / Stop Button */}
+          {isSupported ? (
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={toggleSpeech}
+                className={`p-1.5 rounded-lg text-xs font-medium border transition-colors flex items-center gap-1.5 ${
+                  isSpeaking
+                    ? 'bg-cyan-950/70 border-cyan-500/60 text-cyan-300 shadow-sm shadow-cyan-500/20'
+                    : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700'
+                }`}
+                title={
+                  isSpeaking
+                    ? 'Stop browser speech narration'
+                    : 'Speak current scene using browser speech synthesis'
+                }
+                aria-label={isSpeaking ? 'Stop Speech' : 'Speak Scene'}
+              >
+                {isSpeaking ? (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+                    <span>Stop Speech</span>
+                  </>
+                ) : (
+                  <>
+                    <span>🗣️</span>
+                    <span className="hidden sm:inline">Speak</span>
+                  </>
+                )}
+              </button>
 
-          {/* Voice Narration Audio Toggle */}
-          <button
-            onClick={() => {
-              if (captionOnlyFallback) {
-                setCaptionOnlyFallback(false);
-                setNarrationEnabled(true);
-              } else if (!narrationEnabled) {
-                setNarrationEnabled(true);
-              } else {
-                toggleMute();
-              }
-            }}
-            className={`p-1.5 rounded-lg text-xs font-medium border transition-colors flex items-center gap-1.5 ${
-              captionOnlyFallback || !narrationEnabled
-                ? 'bg-amber-950/40 border-amber-800/50 text-amber-300'
-                : !isMuted
-                ? 'bg-indigo-950/60 border-indigo-700/60 text-indigo-300 hover:bg-indigo-900/60'
-                : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
-            }`}
-            title={
-              captionOnlyFallback
-                ? 'Caption-Only Mode (Click to re-enable audio)'
-                : !narrationEnabled
-                ? 'Narration Disabled'
-                : isMuted
-                ? 'Unmute Speech Narration (M)'
-                : 'Mute Speech Narration (M)'
-            }
-            aria-label="Toggle Speech Narration"
-          >
-            {captionOnlyFallback || !narrationEnabled ? (
-              <>
-                <span>💬</span>
-                <span className="hidden sm:inline">Caption Only</span>
-              </>
-            ) : !isMuted ? (
-              <>
-                <svg className="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                </svg>
-                <span className="hidden sm:inline">{selectedVoice} ON</span>
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-                </svg>
-                <span className="hidden sm:inline">Muted</span>
-              </>
-            )}
-          </button>
+              {/* Auto-Speech Toggle */}
+              <button
+                onClick={() => {
+                  if (!narrationEnabled) {
+                    toggleNarration();
+                  } else {
+                    toggleMute();
+                  }
+                }}
+                className={`p-1.5 rounded-lg text-xs font-medium border transition-colors flex items-center gap-1.5 ${
+                  narrationEnabled && !isMuted
+                    ? 'bg-indigo-950/60 border-indigo-700/60 text-indigo-300 hover:bg-indigo-900/60'
+                    : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
+                }`}
+                title={
+                  narrationEnabled && !isMuted
+                    ? 'Auto-Speech is ON (device voice reads scenes automatically during playback)'
+                    : 'Auto-Speech is OFF / Muted'
+                }
+                aria-label="Toggle Auto Speech Narration"
+              >
+                <span>{narrationEnabled && !isMuted ? '🔊' : '🔇'}</span>
+                <span className="hidden lg:inline">
+                  {narrationEnabled && !isMuted ? 'Auto-Voice ON' : 'Muted'}
+                </span>
+              </button>
+            </div>
+          ) : (
+            <div
+              className="px-2 py-1 rounded-lg text-[11px] font-medium bg-slate-800/80 border border-slate-700/60 text-slate-400 flex items-center gap-1.5 select-none"
+              title="Browser speech synthesis is not supported in this browser. Lessons play in Caption-Only mode."
+            >
+              <span>💬</span>
+              <span className="hidden sm:inline">Captions Only</span>
+            </div>
+          )}
 
           {/* Captions Toggle (CC) */}
           <button
