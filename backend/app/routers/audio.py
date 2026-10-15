@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import Settings, get_settings
 from app.models.audio import NarrationRequest
-from app.services.gemini_client import GeminiError
+from app.services.gemini_client import GeminiError, GeminiRateLimitError
 from app.services.tts_client import GeminiTTSClient
 from app.utils.sanitizer import sanitize_content
 
@@ -72,6 +72,24 @@ async def generate_narration(
             language=payload.language,
             voice=payload.voice,
             is_fixture=payload.is_fixture,
+        )
+    except GeminiRateLimitError as exc:
+        logger.warning("TTS rate limit / quota exhausted: %s (retry_after=%s)", exc.detail, exc.retry_after)
+        headers: dict[str, str] = {}
+        if exc.retry_after is not None:
+            headers["Retry-After"] = str(exc.retry_after)
+        return JSONResponse(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            content={
+                "type": "https://errors.decodeai.dev/rate-limit",
+                "title": "Gemini TTS Rate Limit",
+                "status": status.HTTP_429_TOO_MANY_REQUESTS,
+                "detail": exc.detail,
+                "retry_after": exc.retry_after,
+                "instance": "/api/audio/narrate",
+            },
+            headers=headers,
+            media_type="application/problem+json",
         )
     except GeminiError as exc:
         logger.warning("TTS error [%d]: %s", exc.status_code, exc.detail)

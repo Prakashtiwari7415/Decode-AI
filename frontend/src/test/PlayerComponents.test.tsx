@@ -161,7 +161,7 @@ describe('Player Components', () => {
     expect(screen.getByText(/TTS provider error 502/i)).toBeInTheDocument();
 
     // Click caption-only mode button on error banner
-    const captionOnlyBtn = screen.getByRole('button', { name: 'Caption-Only Mode' });
+    const captionOnlyBtn = screen.getByRole('button', { name: /Caption-Only Mode/i });
     fireEvent.click(captionOnlyBtn);
     expect(useLessonStore.getState().captionOnlyFallback).toBe(true);
   });
@@ -180,7 +180,43 @@ describe('Player Components', () => {
     useLessonStore.getState().setAudioLoading(false);
     useLessonStore.getState().setCaptionOnlyFallback(true);
     rerender(<PlayerViewport />);
-    expect(screen.getByText(/Caption Only/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Caption Only/i).length).toBeGreaterThan(0);
+  });
+
+  it('renders unambiguous playback status badge reflecting accurate player state in PlayerViewport', () => {
+    // 1. Initial paused state
+    const { rerender } = render(<PlayerViewport />);
+    expect(screen.getByText('PAUSED')).toBeInTheDocument();
+
+    // 2. Synthesizing audio state
+    act(() => {
+      useLessonStore.getState().setAudioLoading(true);
+    });
+    rerender(<PlayerViewport />);
+    expect(screen.getByText('SYNTHESIZING AUDIO')).toBeInTheDocument();
+
+    // 3. Audio playing state
+    act(() => {
+      useLessonStore.getState().setAudioLoading(false);
+      useLessonStore.getState().play();
+    });
+    rerender(<PlayerViewport />);
+    expect(screen.getByText('PLAYING')).toBeInTheDocument();
+
+    // 4. Caption-only playing state
+    act(() => {
+      useLessonStore.getState().setCaptionOnlyFallback(true);
+    });
+    rerender(<PlayerViewport />);
+    expect(screen.getByText('PLAYING (CAPTION ONLY)')).toBeInTheDocument();
+
+    // 5. Audio error state
+    act(() => {
+      useLessonStore.getState().setCaptionOnlyFallback(false);
+      useLessonStore.getState().setAudioError('429 Quota Exceeded');
+    });
+    rerender(<PlayerViewport />);
+    expect(screen.getByText('AUDIO ERROR')).toBeInTheDocument();
   });
 
   it('renders ArchitectureScene with all system pipeline nodes and labels', () => {

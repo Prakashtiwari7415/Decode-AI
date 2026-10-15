@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach, type MockInstance } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useLessonStore } from '../stores/lessonStore';
-import { useAudioNarration } from '../hooks/useAudioNarration';
+import { useAudioNarration, clearClientAudioCache } from '../hooks/useAudioNarration';
 import { useLessonTimeline } from '../hooks/useLessonTimeline';
 import * as api from '../services/api';
 import { Lesson } from '../types/lesson';
@@ -61,6 +61,8 @@ describe('useAudioNarration and useLessonTimeline', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    clearClientAudioCache();
+    api.clearInFlightAudioRequests();
     useLessonStore.getState().reset();
     useLessonStore.getState().setLesson(mockLesson);
 
@@ -80,12 +82,15 @@ describe('useAudioNarration and useLessonTimeline', () => {
       expect(mockFetchAudio).toHaveBeenCalledTimes(1);
     });
 
-    expect(mockFetchAudio).toHaveBeenCalledWith({
-      text: 'Hello, welcome to this lesson about asynchronous queues.',
-      language: 'en',
-      voice: 'Puck',
-      is_fixture: true,
-    });
+    expect(mockFetchAudio).toHaveBeenCalledWith(
+      {
+        text: 'Hello, welcome to this lesson about asynchronous queues.',
+        language: 'en',
+        voice: 'Puck',
+        is_fixture: true,
+      },
+      expect.any(AbortSignal)
+    );
 
     expect(result.current.audioElement).toBeDefined();
     expect(useLessonStore.getState().audioLoading).toBe(false);
@@ -136,7 +141,8 @@ describe('useAudioNarration and useLessonTimeline', () => {
     expect(mockFetchAudio).toHaveBeenLastCalledWith(
       expect.objectContaining({
         voice: 'Aoede',
-      })
+      }),
+      expect.any(AbortSignal)
     );
   });
 
@@ -151,6 +157,51 @@ describe('useAudioNarration and useLessonTimeline', () => {
 
     expect(useLessonStore.getState().captionOnlyFallback).toBe(true);
     expect(useLessonStore.getState().audioLoading).toBe(false);
+  });
+
+  it('handles 429 quota rate limit by extracting retryAfter and entering caption-only mode', async () => {
+    mockFetchAudio.mockRejectedValueOnce(
+      new api.ApiError(429, 'Gemini TTS rate limit or quota exceeded.', 15)
+    );
+
+    renderHook(() => useAudioNarration());
+
+    await waitFor(() => {
+      expect(useLessonStore.getState().audioError).toContain('Gemini TTS rate limit/quota reached');
+    });
+
+    expect(useLessonStore.getState().retryAfterSeconds).toBe(15);
+    expect(useLessonStore.getState().captionOnlyFallback).toBe(true);
+    expect(useLessonStore.getState().audioLoading).toBe(false);
+  });
+
+  it('aborts prior pending request when switching scenes rapidly', async () => {
+    const signals: AbortSignal[] = [];
+    mockFetchAudio.mockImplementation((_req, signal) => {
+      if (signal) signals.push(signal);
+      return new Promise(() => {}); // unresolved hanging promise
+    });
+
+    renderHook(() => useAudioNarration());
+
+    await waitFor(() => {
+      expect(signals.length).toBe(1);
+    });
+
+    expect(signals[0].aborted).toBe(false);
+
+    // Switch scene rapidly
+    act(() => {
+      useLessonStore.getState().nextScene();
+    });
+
+    await waitFor(() => {
+      expect(signals.length).toBe(2);
+    });
+
+    // The prior signal should now be aborted, while the new signal is active
+    expect(signals[0].aborted).toBe(true);
+    expect(signals[1].aborted).toBe(false);
   });
 
   it('does not fetch audio when narration is disabled by the user', async () => {

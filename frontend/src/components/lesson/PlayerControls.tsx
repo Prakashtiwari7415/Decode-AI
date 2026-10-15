@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useLessonStore } from '../../stores/lessonStore';
 import { VoiceName } from '../../types/lesson';
 import { ProgressBar } from './ProgressBar';
@@ -31,6 +31,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
     narrationEnabled,
     audioLoading,
     audioError,
+    retryAfterSeconds,
     captionOnlyFallback,
     sceneElapsedMs,
     activeSceneDurationMs,
@@ -47,8 +48,31 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
     setSelectedVoice,
     setNarrationEnabled,
     setAudioError,
+    setRetryAfterSeconds,
     setCaptionOnlyFallback,
   } = useLessonStore();
+
+  const [cooldownRemaining, setCooldownRemaining] = useState<number>(0);
+
+  // Handle countdown timer when backend returns Retry-After
+  useEffect(() => {
+    if (retryAfterSeconds && retryAfterSeconds > 0) {
+      setCooldownRemaining(retryAfterSeconds);
+      const timer = setInterval(() => {
+        setCooldownRemaining((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            setRetryAfterSeconds(null);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(timer);
+    } else {
+      setCooldownRemaining(0);
+    }
+  }, [retryAfterSeconds, setRetryAfterSeconds]);
 
   const currentScene = getCurrentScene();
   const currentSceneDurationMs = useMemo(() => {
@@ -93,26 +117,36 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
       )}
 
       {audioError && !audioLoading && (
-        <div className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-amber-950/50 border border-amber-800/60 text-xs text-amber-200">
-          <div className="flex items-center gap-2 overflow-hidden">
+        <div className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-amber-950/50 border border-amber-800/60 text-xs text-amber-200 flex-wrap">
+          <div className="flex items-center gap-2 overflow-hidden min-w-[200px]">
             <span>ℹ️</span>
             <span className="truncate">{audioError}</span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
+              disabled={cooldownRemaining > 0}
               onClick={() => {
                 setAudioError(null);
+                setCaptionOnlyFallback(false);
                 setNarrationEnabled(true);
+                // Trigger scene re-fetch by toggling voice or scene reload
+                const currentVoice = selectedVoice;
+                setSelectedVoice(currentVoice);
               }}
-              className="px-2 py-0.5 rounded bg-amber-900/60 hover:bg-amber-800 text-[11px] text-amber-100 font-medium transition-colors"
+              className="px-2.5 py-1 rounded bg-amber-900/60 hover:bg-amber-800 disabled:opacity-50 disabled:cursor-not-allowed text-[11px] text-amber-100 font-medium transition-colors"
+              title={cooldownRemaining > 0 ? `Wait ${cooldownRemaining}s before retrying` : 'Retry Gemini TTS'}
             >
-              Retry Audio
+              {cooldownRemaining > 0 ? `Retry Audio (${cooldownRemaining}s)` : 'Retry Audio'}
             </button>
             <button
-              onClick={() => setCaptionOnlyFallback(true)}
-              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 transition-colors"
+              onClick={() => {
+                setAudioError(null);
+                setCaptionOnlyFallback(true);
+              }}
+              className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 transition-colors flex items-center gap-1"
+              title="Continue lesson in Caption-Only mode"
             >
-              Caption-Only Mode
+              <span>💬</span> Caption-Only Mode
             </button>
           </div>
         </div>

@@ -1,5 +1,6 @@
 """Unit tests for GeminiTTSClient, WAV formatting, and audio synthesis."""
 
+import asyncio
 import io
 import wave
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -16,6 +17,7 @@ from app.services.gemini_client import (
 )
 from app.services.tts_client import (
     GeminiTTSClient,
+    clear_tts_cache,
     ensure_wav_format,
     generate_synthetic_wav,
 )
@@ -209,3 +211,90 @@ def test_prompt_construction_multilingual() -> None:
     assert "Hinglish" in prompt_hinglish
     assert "code terms" in prompt_hinglish
     assert "Comprehension optimize karta hai" in prompt_hinglish
+
+
+@pytest.mark.asyncio
+async def test_tts_in_memory_cache_hit_avoids_remote_call() -> None:
+    """Test that subsequent synthesis of identical text/voice hits the in-memory cache."""
+    clear_tts_cache()
+
+    fake_pcm = b"\x00\x00" * 800
+    mock_part = MagicMock()
+    mock_part.inline_data = MagicMock()
+    mock_part.inline_data.data = fake_pcm
+    mock_part.inline_data.mime_type = "audio/pcm;rate=24000"
+
+    mock_candidate = MagicMock()
+    mock_candidate.content = MagicMock()
+    mock_candidate.content.parts = [mock_part]
+
+    mock_response = MagicMock()
+    mock_response.candidates = [mock_candidate]
+
+    client1 = GeminiTTSClient(api_key="AIzaSyValidKeyForTest123")
+    client2 = GeminiTTSClient(api_key="AIzaSyValidKeyForTest123")
+
+    mock_generate = AsyncMock(return_value=mock_response)
+
+    with patch.object(client1._client.aio.models, "generate_content", new=mock_generate):
+        # First call -> misses cache, executes remote API
+        wav1, mime1 = await client1.synthesize(
+            text="Cacheable scene text",
+            language=Language.EN,
+            voice="Puck",
+            is_fixture=False,
+        )
+
+        # Second call on different client instance -> hits cache, generate_content NOT called again
+        wav2, mime2 = await client2.synthesize(
+            text="Cacheable scene text",
+            language=Language.EN,
+            voice="Puck",
+            is_fixture=False,
+        )
+
+    assert mock_generate.call_count == 1
+    assert wav1 == wav2
+    assert mime1 == mime2 == "audio/wav"
+
+
+@pytest.mark.asyncio
+async def test_tts_concurrent_single_flight_deduplication() -> None:
+    """Test that multiple concurrent requests for the same text coalesce into a single remote call."""
+    clear_tts_cache()
+
+    fake_pcm = b"\x00\x00" * 1000
+    mock_part = MagicMock()
+    mock_part.inline_data = MagicMock()
+    mock_part.inline_data.data = fake_pcm
+    mock_part.inline_data.mime_type = "audio/pcm;rate=24000"
+
+    mock_candidate = MagicMock()
+    mock_candidate.content = MagicMock()
+    mock_candidate.content.parts = [mock_part]
+
+    mock_response = MagicMock()
+    mock_response.candidates = [mock_candidate]
+
+    client = GeminiTTSClient(api_key="AIzaSyValidKeyForTest123")
+
+    call_count = 0
+
+    async def slow_generate(*args: object, **kwargs: object) -> MagicMock:
+        nonlocal call_count
+        call_count += 1
+        await asyncio.sleep(0.05)
+        return mock_response
+
+    with patch.object(client._client.aio.models, "generate_content", new=slow_generate):
+        # Fire 3 concurrent synthesis requests for the exact same input
+        results = await asyncio.gather(
+            client.synthesize("Concurrent text request", Language.EN, "Kore", False),
+            client.synthesize("Concurrent text request", Language.EN, "Kore", False),
+            client.synthesize("Concurrent text request", Language.EN, "Kore", False),
+        )
+
+    # Exactly 1 remote call executed despite 3 concurrent requests
+    assert call_count == 1
+    assert len(results) == 3
+    assert results[0] == results[1] == results[2]

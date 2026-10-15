@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import time
 import uuid
 from datetime import UTC, datetime
 
@@ -35,9 +36,12 @@ class GeminiRateLimitError(GeminiError):
     """Raised when Gemini quota or rate limit is exhausted."""
 
     def __init__(
-        self, detail: str = "Gemini API rate limit or quota exceeded. Please wait before retrying."
+        self,
+        detail: str = "Gemini API rate limit or quota exceeded. Please wait before retrying.",
+        retry_after: int | None = None,
     ) -> None:
         super().__init__(detail=detail, status_code=429)
+        self.retry_after = retry_after
 
 
 class GeminiTimeoutError(GeminiError):
@@ -125,15 +129,20 @@ class GeminiClient:
         response = None
         used_model = self.model_name
 
+        total_start = time.perf_counter()
+        api_duration_ms = 0.0
+
         for idx, candidate_model in enumerate(models_to_try):
             try:
                 logger.info("Sending generation request to Gemini model: %s", candidate_model)
+                api_start = time.perf_counter()
                 async with asyncio.timeout(self.timeout_seconds):
                     response = await client.aio.models.generate_content(
                         model=candidate_model,
                         contents=prompt,
                         config=config,
                     )
+                api_duration_ms = round((time.perf_counter() - api_start) * 1000, 1)
                 used_model = candidate_model
                 break
             except TimeoutError as exc:
@@ -191,6 +200,7 @@ class GeminiClient:
             raise GeminiModelOutputError("Model returned an empty response.")
 
         # Parse JSON
+        parse_start = time.perf_counter()
         try:
             parsed_data = json.loads(raw_text)
         except json.JSONDecodeError as exc:
@@ -208,9 +218,29 @@ class GeminiClient:
         except Exception as exc:
             logger.error("Pydantic schema validation error on Gemini output: %s", exc)
             raise GeminiModelOutputError(f"Model output schema validation failed: {exc}") from exc
+        parse_duration_ms = round((time.perf_counter() - parse_start) * 1000, 1)
 
         # Enrich, quality-validate, and normalize lesson
-        return self._enrich_lesson(lesson, used_model=used_model, user_content=user_content)
+        quality_start = time.perf_counter()
+        enriched_lesson = self._enrich_lesson(lesson, used_model=used_model, user_content=user_content)
+        quality_duration_ms = round((time.perf_counter() - quality_start) * 1000, 1)
+        total_duration_ms = round((time.perf_counter() - total_start) * 1000, 1)
+
+        logger.info(
+            "Lesson generation timing breakdown: gemini_api=%.1fms, parse_validate=%.1fms, quality_validation=%.1fms, total=%.1fms",
+            api_duration_ms,
+            parse_duration_ms,
+            quality_duration_ms,
+            total_duration_ms,
+        )
+
+        enriched_lesson._timing_metrics = {
+            "gemini": api_duration_ms,
+            "parse": parse_duration_ms,
+            "quality": quality_duration_ms,
+            "total": total_duration_ms,
+        }
+        return enriched_lesson
 
     def _enrich_lesson(
         self,

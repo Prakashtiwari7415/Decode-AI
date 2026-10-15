@@ -30,6 +30,7 @@ export function useLessonTimeline(): UseLessonTimelineResult {
     seekTargetMs,
     captionsEnabled,
     getCurrentScene,
+    getPlaybackStatus,
     setSceneElapsedMs,
     setCurrentCaptionText,
     setActiveHighlightTerm,
@@ -46,6 +47,7 @@ export function useLessonTimeline(): UseLessonTimelineResult {
   const sceneFinishedRef = useRef<boolean>(false);
 
   const scene = getCurrentScene();
+  const playbackStatus = getPlaybackStatus();
 
   // Compute scene duration: prioritize actual decoded audio duration, then captions, then word-count estimate
   const getSceneDurationMs = useCallback((): number => {
@@ -152,10 +154,7 @@ export function useLessonTimeline(): UseLessonTimelineResult {
     lastClockTimeRef.current = performance.now();
 
     const isAudioActive =
-      narrationEnabled &&
-      !isMuted &&
-      !captionOnlyFallback &&
-      !audioLoading &&
+      playbackStatus === 'playing_audio' &&
       audio.audioElement !== null &&
       audio.audioElement.src !== '' &&
       !audio.audioElement.error;
@@ -168,7 +167,7 @@ export function useLessonTimeline(): UseLessonTimelineResult {
         effectiveElapsed = Math.min(audio.audioElement.currentTime * 1000, durationMs);
         sceneElapsedMsRef.current = effectiveElapsed;
         lastClockTimeRef.current = performance.now();
-      } else if (!audioLoading) {
+      } else if (playbackStatus === 'caption_only') {
         // Fallback timer clock for caption-only mode or muted playback
         const now = performance.now();
         const delta = (now - lastClockTimeRef.current) * playbackSpeed;
@@ -176,7 +175,7 @@ export function useLessonTimeline(): UseLessonTimelineResult {
         effectiveElapsed = Math.min(sceneElapsedMsRef.current + delta, durationMs);
         sceneElapsedMsRef.current = effectiveElapsed;
       } else {
-        // Audio is currently buffering or synthesizing: pause clock progress
+        // Audio is currently buffering, synthesizing, or errored: pause clock progress
         lastClockTimeRef.current = performance.now();
         effectiveElapsed = sceneElapsedMsRef.current;
       }
@@ -218,6 +217,7 @@ export function useLessonTimeline(): UseLessonTimelineResult {
     };
   }, [
     isPlaying,
+    playbackStatus,
     activeChapterIndex,
     activeSceneIndex,
     playbackSpeed,

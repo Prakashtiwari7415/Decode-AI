@@ -125,11 +125,11 @@ def test_narrate_missing_api_key_returns_401() -> None:
 
 
 def test_narrate_rate_limit_returns_429() -> None:
-    """Verify POST /api/audio/narrate returns 429 when quota is exhausted."""
+    """Verify POST /api/audio/narrate returns 429 with Retry-After when quota is exhausted."""
     with patch.object(
         GeminiTTSClient,
         "synthesize",
-        new=AsyncMock(side_effect=GeminiRateLimitError("TTS rate limit reached.")),
+        new=AsyncMock(side_effect=GeminiRateLimitError("TTS rate limit reached.", retry_after=12)),
     ):
         response = client.post(
             "/api/audio/narrate",
@@ -142,7 +142,11 @@ def test_narrate_rate_limit_returns_429() -> None:
         )
         assert response.status_code == 429
         assert response.headers["Content-Type"] == "application/problem+json"
-        assert response.json()["status"] == 429
+        assert response.headers["Retry-After"] == "12"
+        data = response.json()
+        assert data["status"] == 429
+        assert data["retry_after"] == 12
+        assert data["title"] == "Gemini TTS Rate Limit"
 
 
 def test_narrate_timeout_returns_504() -> None:

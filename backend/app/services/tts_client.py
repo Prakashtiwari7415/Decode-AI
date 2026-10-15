@@ -1,6 +1,7 @@
 """Text-to-Speech (TTS) service using official Google Gen AI SDK for Gemini Audio."""
 
 import asyncio
+import hashlib
 import io
 import logging
 import math
@@ -20,6 +21,25 @@ from app.services.gemini_client import (
 )
 
 logger = logging.getLogger("decodeai.tts")
+
+# Module-level audio cache and concurrent in-flight task deduplication
+_audio_cache: dict[str, tuple[bytes, str]] = {}
+_in_flight_tasks: dict[str, asyncio.Task[tuple[bytes, str]]] = {}
+_in_flight_lock = asyncio.Lock()
+MAX_CACHE_ENTRIES = 200
+
+
+def get_tts_cache_key(text: str, language: Language, voice: str, model: str) -> str:
+    """Generate a deterministic cache key based on language, voice, model, and text hash."""
+    normalized = text.strip()
+    h = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:24]
+    return f"{language.value}:{voice}:{model}:{h}"
+
+
+def clear_tts_cache() -> None:
+    """Reset the in-memory TTS cache and in-flight tasks (useful for testing)."""
+    _audio_cache.clear()
+    _in_flight_tasks.clear()
 
 
 def ensure_wav_format(audio_bytes: bytes, mime_type: str = "audio/wav") -> bytes:
@@ -156,41 +176,13 @@ class GeminiTTSClient(TTSClient):
             f"{text}"
         )
 
-    async def synthesize(
+    async def _synthesize_remote(
         self,
         text: str,
         language: Language,
-        voice: str = "Puck",
-        is_fixture: bool = False,
+        voice: str,
     ) -> tuple[bytes, str]:
-        """Synthesize scene narration into browser-ready WAV audio.
-
-        Args:
-            text: Validated narration text.
-            language: Narration language (en, hi, or hinglish).
-            voice: Prebuilt voice identifier.
-            is_fixture: If True, produces offline synthetic WAV audio without remote API call.
-
-        Returns:
-            Tuple of (audio_bytes, mime_type).
-        """
-        # If offline fixture mode is explicitly requested or when key is placeholder in fixture context
-        if is_fixture or self._is_placeholder(self.api_key):
-            if is_fixture:
-                logger.info(
-                    "Generating deterministic synthetic fixture WAV audio (text_len=%d)", len(text)
-                )
-                words = len(text.split())
-                wpm = 110 if language == Language.HI else 125
-                duration_sec = max(2.5, (words / wpm) * 60)
-                wav_bytes = generate_synthetic_wav(duration_seconds=duration_sec)
-                return wav_bytes, "audio/wav"
-
-            # If not a fixture request but key is missing, raise auth error
-            raise GeminiAuthError(
-                "Gemini API key is missing or set to placeholder. Please set a valid GEMINI_API_KEY."
-            )
-
+        """Perform the actual remote Gemini TTS API call with bounded retries on transient errors."""
         client = self._ensure_client()
         prompt = self._build_prompt(text, language)
 
@@ -207,46 +199,72 @@ class GeminiTTSClient(TTSClient):
             temperature=0.3,
         )
 
-        try:
-            logger.info(
-                "Requesting audio narration from Gemini TTS model=%s voice=%s language=%s (len=%d)",
-                self.model_name,
-                voice,
-                language.value,
-                len(text),
-            )
-            async with asyncio.timeout(self.timeout_seconds):
-                response = await client.aio.models.generate_content(
-                    model=self.model_name,
-                    contents=prompt,
-                    config=config,
+        # Single bounded attempt with retry ONLY for transient 503 errors (never retry on 429 quota)
+        max_attempts = 2
+        last_error: Exception | None = None
+
+        for attempt in range(max_attempts):
+            try:
+                logger.info(
+                    "Requesting audio narration from Gemini TTS model=%s voice=%s language=%s (len=%d, attempt=%d)",
+                    self.model_name,
+                    voice,
+                    language.value,
+                    len(text),
+                    attempt + 1,
                 )
-        except TimeoutError as exc:
-            logger.error("Gemini TTS request timed out after %s seconds", self.timeout_seconds)
-            raise GeminiTimeoutError("Gemini audio narration timed out. Please retry.") from exc
-        except errors.APIError as exc:
-            logger.error("Gemini TTS APIError [code=%s]: %s", exc.code, exc.message)
-            if exc.code in (401, 403):
-                raise GeminiAuthError(
-                    "Gemini API authentication failed for TTS. Verify that GEMINI_API_KEY is valid."
-                ) from exc
-            if exc.code == 429:
-                raise GeminiRateLimitError(
-                    "Gemini TTS rate limit or quota exceeded. Please wait a moment before retrying."
-                ) from exc
-            if exc.code in (500, 502, 503, 504):
+                async with asyncio.timeout(self.timeout_seconds):
+                    response = await client.aio.models.generate_content(
+                        model=self.model_name,
+                        contents=prompt,
+                        config=config,
+                    )
+                # Successful response
+                break
+            except TimeoutError as exc:
+                logger.error("Gemini TTS request timed out after %s seconds", self.timeout_seconds)
+                raise GeminiTimeoutError("Gemini audio narration timed out. Please retry.") from exc
+            except errors.APIError as exc:
+                logger.error("Gemini TTS APIError [code=%s]: %s", exc.code, exc.message)
+                if exc.code in (401, 403):
+                    raise GeminiAuthError(
+                        "Gemini API authentication failed for TTS. Verify that GEMINI_API_KEY is valid."
+                    ) from exc
+                if exc.code == 429:
+                    # Do NOT retry on quota/rate limit error
+                    retry_after = 10
+                    if hasattr(exc, "response") and exc.response and hasattr(exc.response, "headers"):
+                        ra = exc.response.headers.get("retry-after")
+                        if ra and ra.isdigit():
+                            retry_after = int(ra)
+                    raise GeminiRateLimitError(
+                        "Gemini TTS rate limit or quota exceeded. Please wait a moment before retrying.",
+                        retry_after=retry_after,
+                    ) from exc
+                if exc.code == 503 and attempt < max_attempts - 1:
+                    logger.warning("Gemini TTS 503 transient error; retrying once after 0.5s backoff...")
+                    await asyncio.sleep(0.5)
+                    last_error = exc
+                    continue
+                if exc.code in (500, 502, 503, 504):
+                    raise GeminiError(
+                        detail="Google Gemini audio service is temporarily unavailable. Please retry.",
+                        status_code=502,
+                    ) from exc
                 raise GeminiError(
-                    detail="Google Gemini audio service is temporarily unavailable. Please retry.",
-                    status_code=502,
+                    detail=exc.message or "Gemini TTS API error occurred.", status_code=502
                 ) from exc
-            raise GeminiError(
-                detail=exc.message or "Gemini TTS API error occurred.", status_code=502
-            ) from exc
-        except Exception as exc:
-            logger.exception("Unexpected error during Gemini TTS generation: %s", exc)
-            raise GeminiError(
-                detail=f"Failed to communicate with AI audio provider: {exc}", status_code=502
-            ) from exc
+            except Exception as exc:
+                logger.exception("Unexpected error during Gemini TTS generation: %s", exc)
+                raise GeminiError(
+                    detail=f"Failed to communicate with AI audio provider: {exc}", status_code=502
+                ) from exc
+        else:
+            if last_error:
+                raise GeminiError(
+                    detail="Google Gemini audio service is temporarily unavailable after retry.",
+                    status_code=502,
+                ) from last_error
 
         # Extract audio payload from candidates
         candidates = getattr(response, "candidates", None) or []
@@ -271,6 +289,82 @@ class GeminiTTSClient(TTSClient):
 
         final_wav = ensure_wav_format(audio_data, detected_mime)
         return final_wav, "audio/wav"
+
+    async def synthesize(
+        self,
+        text: str,
+        language: Language,
+        voice: str = "Puck",
+        is_fixture: bool = False,
+    ) -> tuple[bytes, str]:
+        """Synthesize scene narration into browser-ready WAV audio with caching and single-flight execution.
+
+        Args:
+            text: Validated narration text.
+            language: Narration language (en, hi, or hinglish).
+            voice: Prebuilt voice identifier.
+            is_fixture: If True, produces offline synthetic WAV audio without remote API call.
+
+        Returns:
+            Tuple of (audio_bytes, mime_type).
+        """
+        cache_key = get_tts_cache_key(text, language, voice, self.model_name)
+
+        # 1. Fast path: in-memory cache hit
+        if cache_key in _audio_cache:
+            logger.info("TTS cache HIT for key=%s", cache_key)
+            return _audio_cache[cache_key]
+
+        # 2. Offline fixture mode
+        if is_fixture or self._is_placeholder(self.api_key):
+            if is_fixture:
+                logger.info(
+                    "Generating deterministic synthetic fixture WAV audio (text_len=%d)", len(text)
+                )
+                words = len(text.split())
+                wpm = 110 if language == Language.HI else 125
+                duration_sec = max(2.5, (words / wpm) * 60)
+                wav_bytes = generate_synthetic_wav(duration_seconds=duration_sec)
+                result = (wav_bytes, "audio/wav")
+                _audio_cache[cache_key] = result
+                return result
+
+            # If not a fixture request but key is missing, raise auth error
+            raise GeminiAuthError(
+                "Gemini API key is missing or set to placeholder. Please set a valid GEMINI_API_KEY."
+            )
+
+        # 3. Single-flight execution: coalesce concurrent requests for identical key
+        async with _in_flight_lock:
+            # Check cache again inside lock
+            if cache_key in _audio_cache:
+                return _audio_cache[cache_key]
+
+            existing_task = _in_flight_tasks.get(cache_key)
+            if existing_task is None:
+                task = asyncio.create_task(
+                    self._synthesize_remote(text=text, language=language, voice=voice)
+                )
+                _in_flight_tasks[cache_key] = task
+                is_creator = True
+            else:
+                logger.info("TTS single-flight: reusing active in-flight task for key=%s", cache_key)
+                task = existing_task
+                is_creator = False
+
+        try:
+            result = await task
+            if is_creator:
+                # Evict oldest if cache limit reached
+                if len(_audio_cache) >= MAX_CACHE_ENTRIES:
+                    oldest_key = next(iter(_audio_cache))
+                    _audio_cache.pop(oldest_key, None)
+                _audio_cache[cache_key] = result
+            return result
+        finally:
+            if is_creator:
+                async with _in_flight_lock:
+                    _in_flight_tasks.pop(cache_key, None)
 
 
 # Backwards compatibility alias

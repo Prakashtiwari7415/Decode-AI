@@ -10,6 +10,14 @@ export type GroundingCategory = 'observed' | 'inferred' | 'needs_verification';
 
 export type VoiceName = 'Puck' | 'Charon' | 'Kore' | 'Fenrir' | 'Aoede';
 
+export type PlaybackStatus =
+  | 'idle'
+  | 'requesting_audio'
+  | 'playing_audio'
+  | 'paused_audio'
+  | 'caption_only'
+  | 'error';
+
 // Request
 export interface LessonRequest {
   content: string;

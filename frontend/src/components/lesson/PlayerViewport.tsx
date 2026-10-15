@@ -14,6 +14,7 @@ export const PlayerViewport: React.FC = () => {
     audioLoading,
     captionOnlyFallback,
     getCurrentScene,
+    getPlaybackStatus,
     togglePlay,
   } = useLessonStore();
 
@@ -21,6 +22,7 @@ export const PlayerViewport: React.FC = () => {
 
   const scene = getCurrentScene();
   const currentChapter = lesson?.chapters[activeChapterIndex];
+  const playbackStatus = getPlaybackStatus();
 
   if (!lesson || !scene || !currentChapter) {
     return (
@@ -107,21 +109,33 @@ export const PlayerViewport: React.FC = () => {
             </span>
           )}
 
-          {/* Playing / Paused Indicator */}
-          <span
-            className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold flex items-center gap-1.5 ${
-              isPlaying
-                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                : 'bg-slate-800/80 text-slate-400 border border-slate-700/60'
-            }`}
-          >
-            <span
-              className={`w-1.5 h-1.5 rounded-full ${
-                isPlaying ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
-              }`}
-            />
-            {isPlaying ? 'PLAYING' : 'PAUSED'}
-          </span>
+          {/* Unambiguous Playback Status Indicator */}
+          {playbackStatus === 'requesting_audio' ? (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold flex items-center gap-1.5 bg-cyan-950/60 text-cyan-300 border border-cyan-700/60">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
+              SYNTHESIZING AUDIO
+            </span>
+          ) : playbackStatus === 'playing_audio' ? (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold flex items-center gap-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              PLAYING
+            </span>
+          ) : playbackStatus === 'caption_only' ? (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold flex items-center gap-1.5 bg-indigo-500/10 text-indigo-300 border border-indigo-500/30">
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+              PLAYING (CAPTION ONLY)
+            </span>
+          ) : playbackStatus === 'error' ? (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold flex items-center gap-1.5 bg-amber-500/10 text-amber-300 border border-amber-500/30">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+              AUDIO ERROR
+            </span>
+          ) : (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold flex items-center gap-1.5 bg-slate-800/80 text-slate-400 border border-slate-700/60">
+              <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+              PAUSED
+            </span>
+          )}
         </div>
       </div>
 

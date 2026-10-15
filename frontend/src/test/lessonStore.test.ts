@@ -227,4 +227,49 @@ describe('useLessonStore', () => {
     expect(useLessonStore.getState().seekTargetMs).toBeNull();
     expect(useLessonStore.getState().sceneElapsedMs).toBe(4500);
   });
+
+  it('accurately derives PlaybackStatus for each state of the player lifecycle', () => {
+    const store = useLessonStore.getState();
+
+    // With lesson loaded and initial paused state
+    expect(store.getPlaybackStatus()).toBe('paused_audio');
+
+    // When user plays with audio enabled
+    store.play();
+    expect(store.getPlaybackStatus()).toBe('playing_audio');
+
+    // When audio is synthesizing in the background
+    store.setAudioLoading(true);
+    expect(store.getPlaybackStatus()).toBe('requesting_audio');
+    store.setAudioLoading(false);
+
+    // When audio encounters an unhandled error
+    store.setAudioError('Gemini 429 rate limit');
+    expect(store.getPlaybackStatus()).toBe('error');
+
+    // When switched to caption-only fallback
+    store.setCaptionOnlyFallback(true);
+    expect(store.getPlaybackStatus()).toBe('caption_only');
+
+    // When muted while playing
+    store.setCaptionOnlyFallback(false);
+    store.setAudioError(null);
+    store.toggleMute();
+    expect(store.getPlaybackStatus()).toBe('caption_only');
+
+    // When lesson is reset
+    store.reset();
+    expect(store.getPlaybackStatus()).toBe('idle');
+  });
+
+  it('tracks retryAfterSeconds cooldown correctly', () => {
+    const store = useLessonStore.getState();
+    expect(store.retryAfterSeconds).toBeNull();
+
+    store.setRetryAfterSeconds(20);
+    expect(useLessonStore.getState().retryAfterSeconds).toBe(20);
+
+    store.setRetryAfterSeconds(null);
+    expect(useLessonStore.getState().retryAfterSeconds).toBeNull();
+  });
 });

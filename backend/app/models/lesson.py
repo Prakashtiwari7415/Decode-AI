@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, PrivateAttr, field_validator
 
 from app.models.common import (
     AnimationStyle,
@@ -228,3 +228,5 @@ class Lesson(BaseModel):
         ..., description="Model version used to synthesize the lesson"
     )
     generated_at: str = Field(..., description="ISO 8601 UTC timestamp of creation")
+
+    _timing_metrics: dict[str, float] = PrivateAttr(default_factory=dict)

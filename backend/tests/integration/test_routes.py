@@ -75,6 +75,8 @@ def test_generate_lesson_fixture_returns_complete_lesson() -> None:
     }
     response = client.post("/api/lessons/generate", json=payload)
     assert response.status_code == 200
+    assert "Server-Timing" in response.headers
+    assert "total;dur=" in response.headers["Server-Timing"]
 
     data = response.json()
     assert "lesson_id" in data

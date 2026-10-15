@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Lesson, Chapter, Scene, VoiceName } from '../types/lesson';
+import { Lesson, Chapter, Scene, VoiceName, PlaybackStatus } from '../types/lesson';
 
 export interface LessonState {
   lesson: Lesson | null;
@@ -19,6 +19,7 @@ export interface LessonState {
   narrationEnabled: boolean;
   audioLoading: boolean;
   audioError: string | null;
+  retryAfterSeconds: number | null;
   captionOnlyFallback: boolean;
   activeSceneDurationMs: number | null;
 
@@ -31,6 +32,7 @@ export interface LessonState {
   getCurrentScene: () => Scene | null;
   getTotalScenes: () => number;
   getGlobalSceneIndex: () => number;
+  getPlaybackStatus: () => PlaybackStatus;
 
   // Actions
   setLesson: (lesson: Lesson | null) => void;
@@ -56,6 +58,7 @@ export interface LessonState {
   toggleNarration: () => void;
   setAudioLoading: (loading: boolean) => void;
   setAudioError: (error: string | null) => void;
+  setRetryAfterSeconds: (seconds: number | null) => void;
   setCaptionOnlyFallback: (fallback: boolean) => void;
   setActiveSceneDurationMs: (ms: number | null) => void;
   reset: () => void;
@@ -70,7 +73,8 @@ const initialAudioState = {
   selectedVoice: 'Puck' as VoiceName,
   narrationEnabled: true,
   audioLoading: false,
-  audioError: null,
+  audioError: null as string | null,
+  retryAfterSeconds: null as number | null,
   captionOnlyFallback: false,
   activeSceneDurationMs: null,
   activeSegmentIndex: 0,
@@ -118,6 +122,17 @@ export const useLessonStore = create<LessonState>((set, get) => ({
       count += lesson.chapters[c].scenes.length;
     }
     return count + activeSceneIndex;
+  },
+
+  getPlaybackStatus: (): PlaybackStatus => {
+    const { lesson, audioLoading, audioError, captionOnlyFallback, narrationEnabled, isMuted, isPlaying } = get();
+    if (!lesson) return 'idle';
+    if (audioLoading) return 'requesting_audio';
+    if (audioError && !captionOnlyFallback) return 'error';
+    if (captionOnlyFallback || !narrationEnabled || isMuted) {
+      return isPlaying ? 'caption_only' : 'paused_audio';
+    }
+    return isPlaying ? 'playing_audio' : 'paused_audio';
   },
 
   setLesson: (lesson: Lesson | null) => {
@@ -296,6 +311,8 @@ export const useLessonStore = create<LessonState>((set, get) => ({
   setAudioLoading: (audioLoading: boolean) => set({ audioLoading }),
 
   setAudioError: (audioError: string | null) => set({ audioError }),
+
+  setRetryAfterSeconds: (retryAfterSeconds: number | null) => set({ retryAfterSeconds }),
 
   setCaptionOnlyFallback: (captionOnlyFallback: boolean) => set({ captionOnlyFallback }),
 
