@@ -25,20 +25,26 @@ export const CodeDiffScene: React.FC<CodeDiffSceneProps> = ({ visual, title }) =
     activeSceneDurationMs && activeSceneDurationMs > 0 ? activeSceneDurationMs : 6000;
   const isSecondPhase = sceneElapsedMs >= totalDuration * 0.5;
 
-  // Simple, safe token syntax highlighter for python
+  const isJson = visual.language?.toLowerCase() === 'json' || visual.after_code?.trim().startsWith('{');
+
+  // Generic syntax highlighter supporting Python, JSON, JavaScript, TypeScript
   const renderSyntaxHighlighted = (codeLine: string) => {
-    const tokens = codeLine.split(/(\s+|[(),:[\]=+\-*])/);
+    // Tokenize strings, numbers, punctuation, keywords
+    const tokens = codeLine.split(/(\s+|"[\s\S]*?"|'[\s\S]*?'|[(),:[\]{} =+\-*])/);
 
     return tokens.map((token, index) => {
       const lower = token.toLowerCase();
-      const isKeyword = ['for', 'in', 'if', 'else', 'def', 'return', 'while'].includes(lower);
-      const isMethod = ['append', 'range', 'print', 'len'].includes(lower);
+      const isString = /^"[\s\S]*?"$/.test(token) || /^'[\s\S]*?'$/.test(token);
+      const isKeyword = [
+        'for', 'in', 'if', 'else', 'def', 'return', 'while', 'import', 'from',
+        'const', 'let', 'var', 'function', 'class', 'true', 'false', 'null',
+      ].includes(lower);
       const isNumber = /^\d+$/.test(token);
       const isHighlightedTerm = visual.highlighted_terms.some(
-        (term) => term.toLowerCase() === lower
+        (term) => term.toLowerCase() === lower.replace(/["':]/g, '')
       );
       const isActivelySpokenTerm = Boolean(
-        activeHighlightTerm && activeHighlightTerm.toLowerCase() === lower
+        activeHighlightTerm && activeHighlightTerm.toLowerCase() === lower.replace(/["':]/g, '')
       );
 
       if (isActivelySpokenTerm) {
@@ -51,16 +57,21 @@ export const CodeDiffScene: React.FC<CodeDiffSceneProps> = ({ visual, title }) =
           </span>
         );
       }
-      if (isKeyword) {
+      if (isString) {
+        // Distinguish JSON property keys from values
+        const isJsonKey = isJson && token.endsWith(':');
         return (
-          <span key={index} className="text-purple-400 font-semibold">
+          <span
+            key={index}
+            className={isJsonKey ? 'text-indigo-300 font-semibold' : 'text-emerald-300'}
+          >
             {token}
           </span>
         );
       }
-      if (isMethod) {
+      if (isKeyword) {
         return (
-          <span key={index} className="text-cyan-300">
+          <span key={index} className="text-purple-400 font-semibold">
             {token}
           </span>
         );
@@ -99,6 +110,18 @@ export const CodeDiffScene: React.FC<CodeDiffSceneProps> = ({ visual, title }) =
     }
   };
 
+  const beforeHeading = beforeLines[0]?.startsWith('//')
+    ? beforeLines[0].replace(/^\/\/\s*/, '')
+    : visual.language === 'python'
+    ? 'Before: Traditional Imperative Loop'
+    : 'Input / Initial State';
+
+  const afterHeading = afterLines[0]?.startsWith('//')
+    ? afterLines[0].replace(/^\/\/\s*/, '')
+    : visual.language === 'python'
+    ? 'After: Declarative List Comprehension'
+    : 'Result / Target Structure';
+
   return (
     <div className="w-full h-full flex flex-col justify-between p-6 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 rounded-xl overflow-hidden select-none">
       {/* Header Bar */}
@@ -106,17 +129,17 @@ export const CodeDiffScene: React.FC<CodeDiffSceneProps> = ({ visual, title }) =
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
           <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
-            {title || 'Syntax Transformation Comparison'}
+            {title || 'Structure & Code Comparison'}
           </span>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-xs text-slate-400 font-mono hidden sm:inline">
-            Language: <span className="text-slate-200 uppercase">{visual.language || 'python'}</span>
+            Language: <span className="text-slate-200 uppercase">{visual.language || 'code'}</span>
           </span>
           <button
             onClick={handleCopy}
             className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium border border-slate-700 transition-colors"
-            title="Copy optimized code"
+            title="Copy snippet"
           >
             {copied ? '✓ Copied' : 'Copy Code'}
           </button>
@@ -128,33 +151,28 @@ export const CodeDiffScene: React.FC<CodeDiffSceneProps> = ({ visual, title }) =
         {/* Before Block */}
         <div className="flex flex-col rounded-lg border border-red-900/40 bg-slate-950/80 overflow-hidden shadow-md">
           <div className="flex items-center justify-between px-3 py-2 bg-red-950/30 border-b border-red-900/30 text-xs">
-            <span className="font-semibold text-red-400 flex items-center gap-1.5">
-              <span>−</span> Before: Traditional Imperative Loop
+            <span className="font-semibold text-red-400 flex items-center gap-1.5 truncate">
+              <span>−</span> {beforeHeading}
             </span>
-            <span className="text-[10px] font-mono text-slate-500">3 lines</span>
+            <span className="text-[10px] font-mono text-slate-500 shrink-0">
+              {beforeLines.length} {beforeLines.length === 1 ? 'line' : 'lines'}
+            </span>
           </div>
 
-          <div className="p-3 font-mono text-xs overflow-x-auto space-y-1">
-            {beforeLines.map((line, idx) => {
-              const isTargetLine = idx === 1 || idx === 2;
-              return (
-                <div
-                  key={idx}
-                  className={`flex items-center gap-3 px-2 py-1 rounded transition-colors ${
-                    isTargetLine
-                      ? 'bg-red-950/20 text-red-200 border-l-2 border-red-500'
-                      : 'text-slate-400'
-                  }`}
-                >
-                  <span className="text-slate-600 w-4 text-right select-none">{idx + 1}</span>
-                  <div className="flex-1 whitespace-pre">{renderSyntaxHighlighted(line)}</div>
-                </div>
-              );
-            })}
+          <div className="p-3 font-mono text-xs overflow-x-auto space-y-1 max-h-[220px]">
+            {beforeLines.map((line, idx) => (
+              <div
+                key={idx}
+                className="flex items-center gap-3 px-2 py-0.5 rounded text-slate-400"
+              >
+                <span className="text-slate-600 w-4 text-right select-none">{idx + 1}</span>
+                <div className="flex-1 whitespace-pre">{renderSyntaxHighlighted(line)}</div>
+              </div>
+            ))}
           </div>
 
           <div className="px-3 py-1.5 bg-slate-950 border-t border-slate-900 text-[11px] text-slate-400 font-sans">
-            Requires explicit array instantiation & repeated method lookups.
+            Source payload representation before decoding or transformation.
           </div>
         </div>
 
@@ -167,17 +185,19 @@ export const CodeDiffScene: React.FC<CodeDiffSceneProps> = ({ visual, title }) =
           }`}
         >
           <div className="flex items-center justify-between px-3 py-2 bg-emerald-950/30 border-b border-emerald-900/30 text-xs">
-            <span className="font-semibold text-emerald-400 flex items-center gap-1.5">
-              <span>+</span> After: Declarative List Comprehension
+            <span className="font-semibold text-emerald-400 flex items-center gap-1.5 truncate">
+              <span>+</span> {afterHeading}
             </span>
-            <span className="text-[10px] font-mono text-emerald-400 font-bold">1 line (Optimized)</span>
+            <span className="text-[10px] font-mono text-emerald-400 font-bold shrink-0">
+              {afterLines.length} {afterLines.length === 1 ? 'line' : 'lines'}
+            </span>
           </div>
 
-          <div className="p-3 font-mono text-xs overflow-x-auto space-y-1">
+          <div className="p-3 font-mono text-xs overflow-x-auto space-y-1 max-h-[220px]">
             {afterLines.map((line, idx) => (
               <div
                 key={idx}
-                className="flex items-center gap-3 px-2 py-1.5 rounded bg-emerald-950/30 text-emerald-200 border-l-2 border-emerald-400"
+                className="flex items-center gap-3 px-2 py-0.5 rounded bg-emerald-950/20 text-emerald-200 border-l-2 border-emerald-400"
               >
                 <span className="text-emerald-500/60 w-4 text-right select-none">{idx + 1}</span>
                 <div className="flex-1 whitespace-pre">{renderSyntaxHighlighted(line)}</div>
@@ -186,9 +206,9 @@ export const CodeDiffScene: React.FC<CodeDiffSceneProps> = ({ visual, title }) =
           </div>
 
           <div className="px-3 py-1.5 bg-slate-950 border-t border-slate-900 text-[11px] text-emerald-300 font-sans flex items-center justify-between">
-            <span>Runs optimized C-level loop inside Python bytecode engine.</span>
+            <span>Verified target structure and attributes.</span>
             <span className="font-mono text-[10px] bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-800">
-              ~35% faster
+              Parsed
             </span>
           </div>
         </div>
@@ -197,7 +217,7 @@ export const CodeDiffScene: React.FC<CodeDiffSceneProps> = ({ visual, title }) =
       {/* Bottom Key Tokens & Takeaway */}
       <div className="bg-slate-950/80 border border-slate-800/80 rounded-lg p-3 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="text-slate-400">Emphasized Concepts:</span>
+          <span className="text-slate-400">Highlighted Terms:</span>
           <div className="flex flex-wrap gap-1.5">
             {visual.highlighted_terms.map((term) => (
               <span
@@ -210,7 +230,7 @@ export const CodeDiffScene: React.FC<CodeDiffSceneProps> = ({ visual, title }) =
           </div>
         </div>
         <div className="text-slate-400 font-mono text-[11px]">
-          [expression <span className="text-purple-400">for</span> item <span className="text-purple-400">in</span> iterable]
+          Format: <span className="text-emerald-400 uppercase">{visual.language || 'code'}</span>
         </div>
       </div>
     </div>

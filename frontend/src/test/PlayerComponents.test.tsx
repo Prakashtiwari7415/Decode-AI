@@ -5,6 +5,7 @@ import { PlayerViewport } from '../components/lesson/PlayerViewport';
 import { PlayerControls } from '../components/lesson/PlayerControls';
 import { ArchitectureScene } from '../components/scenes/ArchitectureScene';
 import { CodeDiffScene } from '../components/scenes/CodeDiffScene';
+import { TextConceptScene } from '../components/scenes/TextConceptScene';
 import { CompanionPanel } from '../components/lesson/CompanionPanel';
 import { Lesson } from '../types/lesson';
 
@@ -202,29 +203,36 @@ describe('Player Components', () => {
     expect(screen.getByText(/Copy Code/i)).toBeInTheDocument();
   });
 
-  it('renders CompanionPanel with chapters, glossary, and interactive verification checklist', () => {
+  it('renders CompanionPanel with chapters, notes, and interactive practice checklist', () => {
     render(<CompanionPanel />);
 
     // Chapters tab is active by default
     expect(screen.getByText(/Fundamentals & Syntax/i)).toBeInTheDocument();
     expect(screen.getByText(/Architecture & Runtime/i)).toBeInTheDocument();
 
-    // Switch to Glossary Tab
-    const glossaryTab = screen.getByRole('button', { name: /Glossary/i });
-    fireEvent.click(glossaryTab);
+    // Switch to Notes Tab
+    const notesTab = screen.getByRole('button', { name: /Notes/i });
+    fireEvent.click(notesTab);
     expect(screen.getByText(/List Comprehension/i)).toBeInTheDocument();
     expect(screen.getByText(/A concise declarative syntax/i)).toBeInTheDocument();
+    expect(screen.getByText(/Active Scene Takeaway/i)).toBeInTheDocument();
 
-    // Switch to Verification Checklist Tab
-    const checklistTab = screen.getByRole('button', { name: /Checklist/i });
-    fireEvent.click(checklistTab);
-    expect(screen.getByText(/Ensure input iterable is non-mutated/i)).toBeInTheDocument();
+    // Switch to Practice Tab
+    const practiceTab = screen.getByRole('button', { name: /Practice/i });
+    fireEvent.click(practiceTab);
+    expect(screen.getAllByText(/Ensure input iterable is non-mutated/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/MUST-KNOW/i)).toBeInTheDocument();
 
-    // Check item
-    const itemText = screen.getByText(/Ensure input iterable is non-mutated/i);
+    // Toggle checklist item
+    const itemText = screen.getAllByText(/Ensure input iterable is non-mutated/i)[0];
     fireEvent.click(itemText);
     expect(useLessonStore.getState().checkedVerificationIds['chk-01']).toBe(true);
+
+    // Knowledge Self-Check questions are present
+    expect(screen.getByText(/Knowledge Self-Check/i)).toBeInTheDocument();
+
+    // Safety guarantee notice is visible
+    expect(screen.getByText(/DecodeAI never executes pasted code/i)).toBeInTheDocument();
   });
 
   it('triggers intra-scene seeking via rewind and forward buttons in PlayerControls', () => {
@@ -283,23 +291,111 @@ describe('Player Components', () => {
     render(<PlayerViewport />);
     expect(screen.getAllByText(/Observed/i).length).toBeGreaterThan(0);
 
-    // 2. CompanionPanel renders checklist with active scene checks and grounding badges
+    // 2. CompanionPanel renders checklist with practice tab
     render(<CompanionPanel />);
-    const checklistTab = screen.getByRole('button', { name: /Checklist/i });
-    fireEvent.click(checklistTab);
+    const practiceTab = screen.getByRole('button', { name: /Practice/i });
+    fireEvent.click(practiceTab);
 
-    // Active Scene Local Checks
-    expect(screen.getByText(/Active Scene Local Checks/i)).toBeInTheDocument();
-    expect(screen.getByText(/Check that items is iterable before execution/i)).toBeInTheDocument();
-    // Grounding tag
-    expect(screen.getAllByText(/Verify/i).length).toBeGreaterThan(0);
+    // Verification checklist items
+    expect(screen.getAllByText(/Ensure input iterable is non-mutated/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/MUST-KNOW/i)).toBeInTheDocument();
 
-    // 3. Switch to Overview Tab to inspect Evidence Grounding Breakdown
-    const overviewTab = screen.getByRole('button', { name: /Overview/i });
-    fireEvent.click(overviewTab);
+    // Static analysis safety guarantee
+    expect(screen.getByText(/DecodeAI never executes pasted code/i)).toBeInTheDocument();
+  });
 
-    expect(screen.getByText(/Evidence Grounding Breakdown/i)).toBeInTheDocument();
-    expect(screen.getByText(/Static Analysis/i)).toBeInTheDocument();
-    expect(screen.getByText(/Safety Guarantee/i)).toBeInTheDocument();
+  it('renders JWT lesson scenes dynamically with zero Python list-comprehension leakage', () => {
+    const jwtVisualText = {
+      scene_type: 'text' as const,
+      highlighted_terms: ['JWT', 'stateless', 'claims', 'bearer token'],
+      animation_style: 'fade-slide' as const,
+    };
+
+    const jwtVisualDiff = {
+      scene_type: 'code_diff' as const,
+      before_code: '// Encoded JWT String\neyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+      after_code: '// Decoded JWT Structure\n{\n  "header": { "alg": "HS256" },\n  "payload": { "sub": "123" }\n}',
+      language: 'json',
+      highlighted_terms: ['header', 'payload', 'signature', 'HS256'],
+      animation_style: 'highlight-sweep' as const,
+    };
+
+    const jwtVisualArch = {
+      scene_type: 'diagram' as const,
+      mermaid_definition: 'graph LR\n  Client[Client App] --> Auth[Auth Server]\n  Auth --> API[Resource API]\n  API --> Data[(Protected Resource)]',
+      highlighted_terms: ['Client App', 'Auth Server', 'Resource API', 'Protected Resource'],
+      animation_style: 'fade-slide' as const,
+    };
+
+    // 1. Render Text Concept Scene
+    const { container: textContainer } = render(
+      <TextConceptScene
+        visual={jwtVisualText}
+        title="What is a JSON Web Token?"
+        narrationText="A JSON Web Token is a compact, URL-safe means of representing claims."
+        whatToVerify={['Verify token transmitted over HTTPS.']}
+      />
+    );
+    expect(screen.getByText(/What is a JSON Web Token\?/i)).toBeInTheDocument();
+    expect(screen.getByText(/representing claims/i)).toBeInTheDocument();
+    expect(textContainer.textContent).not.toContain('.append()');
+    expect(textContainer.textContent).not.toContain('Python virtual machine');
+    expect(textContainer.textContent).not.toContain('C-speed');
+
+    // 2. Render Architecture Scene
+    const { container: archContainer } = render(
+      <ArchitectureScene visual={jwtVisualArch} title="Stateless Request Flow" />
+    );
+    expect(screen.getAllByText(/Client App/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Auth Server/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Resource API/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Protected Resource/i).length).toBeGreaterThan(0);
+    expect(archContainer.textContent).not.toContain('Python VM Engine');
+    expect(archContainer.textContent).not.toContain('.append()');
+
+    // 2. Render Code Diff Scene
+    const { container: diffContainer } = render(
+      <CodeDiffScene visual={jwtVisualDiff} title="Token Structure Breakdown" />
+    );
+    expect(screen.getByText(/Encoded JWT String/i)).toBeInTheDocument();
+    expect(screen.getByText(/Decoded JWT Structure/i)).toBeInTheDocument();
+    expect(diffContainer.textContent).not.toContain('Traditional Imperative Loop');
+    expect(diffContainer.textContent).not.toContain('Declarative List Comprehension');
+    expect(diffContainer.textContent).not.toContain('cpython');
+  });
+
+  it('resets player state completely without leaking state when switching lessons', () => {
+    // Dirty state on initial lesson
+    act(() => {
+      useLessonStore.getState().selectChapter(1);
+      useLessonStore.getState().selectScene(1, 0);
+      useLessonStore.getState().setSceneElapsedMs(8500);
+      useLessonStore.getState().setActiveHighlightTerm('API Gateway');
+      useLessonStore.getState().setCurrentCaptionText('Old caption text');
+      useLessonStore.getState().toggleVerificationItem('chk-01');
+    });
+
+    expect(useLessonStore.getState().activeChapterIndex).toBe(1);
+    expect(useLessonStore.getState().sceneElapsedMs).toBe(8500);
+    expect(useLessonStore.getState().activeHighlightTerm).toBe('API Gateway');
+    expect(useLessonStore.getState().checkedVerificationIds['chk-01']).toBe(true);
+
+    // Load new lesson
+    act(() => {
+      useLessonStore.getState().setLesson({
+        ...mockLesson,
+        lesson_id: 'lesson-fixture-jwt',
+        title: 'JSON Web Tokens',
+      });
+    });
+
+    const state = useLessonStore.getState();
+    expect(state.activeChapterIndex).toBe(0);
+    expect(state.activeSceneIndex).toBe(0);
+    expect(state.sceneElapsedMs).toBe(0);
+    expect(state.activeHighlightTerm).toBeNull();
+    expect(state.currentCaptionText).toBe('');
+    expect(Object.keys(state.checkedVerificationIds)).toHaveLength(0);
+    expect(state.isPlaying).toBe(false);
   });
 });

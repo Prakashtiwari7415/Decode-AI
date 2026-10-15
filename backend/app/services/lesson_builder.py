@@ -44,20 +44,330 @@ class LessonBuilder:
             )
 
     def build_fixture(self, request: LessonRequest) -> Lesson:
-        """Construct a complete, valid Lesson fixture tailored to the requested language.
+        """Construct a complete, valid Lesson fixture tailored to the requested topic and language.
 
-        The fixture consists of:
-        - 1 Chapter
-        - 2 Scenes (one `text` scene and one `code_diff` scene)
-        - 2 Glossary entries
-        - 2 Verification checklist items
-
-        Args:
-            request: The LessonRequest specifying language, detail level, and content type.
-
-        Returns:
-            A populated, valid Lesson Pydantic model.
+        Selects a dedicated JWT fixture if the request relates to JWT/authentication,
+        or defaults to the Python optimization fixture.
         """
+        content_lower = request.content.lower()
+        jwt_keywords = ("jwt", "json web token", "bearer", "token", "auth", "signature", "claims")
+        if any(kw in content_lower for kw in jwt_keywords):
+            return self.build_jwt_fixture(request)
+        return self.build_python_fixture(request)
+
+    def build_jwt_fixture(self, request: LessonRequest) -> Lesson:
+        """Construct a complete, valid JWT (JSON Web Token) fixture in the requested language."""
+        lang = request.language
+
+        if lang == Language.HI:
+            lesson_title = "JSON Web Tokens (JWT) को समझें"
+            chap1_title = "मूल आर्किटेक्चर और टोकन संरचना"
+            chap1_summary = "स्टेटलेस प्रमाणीकरण और JWT के तीन प्रमुख भागों की संरचना को समझें।"
+            scene1_title = "JSON Web Token (JWT) क्या है?"
+            scene1_narration = "JSON Web Token दो पक्षों के बीच सुरक्षित रूप से डेटा और क्लेम्स ट्रांसफर करने का एक कॉम्पैक्ट और स्टेटलेस तरीका है।"
+            scene2_title = "टोकन संरचना: हेडर, पेलोड और सिग्नेचर"
+            scene2_narration = "JWT में डॉट्स से अलग किए गए तीन बेस64url भाग होते हैं: एल्गोरिदम हेडर, पेलोड क्लेम्स और क्रिप्टोग्राफ़िक सिग्नेचर।"
+            chap2_title = "प्रमाणीकरण प्रवाह और सत्यापन"
+            chap2_summary = "यूज़र लॉगिन से लेकर प्रोटेक्टेड रिसोर्स पर सिग्नेचर सत्यापन तक पूरे अनुरोध प्रवाह को समझें।"
+            scene3_title = "स्टेटलेस प्रमाणीकरण प्रवाह"
+            scene3_narration = "क्लाइंट ऑथ सर्वर को क्रेडेंशियल्स भेजता है, हस्ताक्षरित JWT प्राप्त करता है, और प्रोटेक्टेड रिसोर्सेज एक्सेस करने के लिए इसे ऑथराइजेशन हेडर में भेजता है।"
+            scene4_title = "टोकन सिग्नेचर और क्लेम्स का सत्यापन"
+            scene4_narration = "सत्यापन आउटपुट की जांच करने पर पुष्टि होती है कि क्रिप्टोग्राफ़िक सिग्नेचर पेलोड हैश से मेल खाता है और टोकन समाप्त नहीं हुआ है।"
+            glossary = [
+                GlossaryEntry(
+                    term="JSON Web Token (JWT)",
+                    definition="पार्टियों के बीच JSON ऑब्जेक्ट के रूप में सुरक्षित जानकारी ट्रांसफर करने का एक खुला कॉम्पैक्ट मानक (RFC 7519)।",
+                    example="Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                ),
+                GlossaryEntry(
+                    term="डिजिटल सिग्नेचर (Digital Signature)",
+                    definition="हेडर, पेलोड और सीक्रेट कुंजी से तैयार किया गया क्रिप्टोग्राफ़िक हैश जिससे डेटा अखंडता की पुष्टि होती है।",
+                    example="HMACSHA256(base64Url(header) + '.' + base64Url(payload), secret)",
+                ),
+                GlossaryEntry(
+                    term="स्टेटलेस ऑथ (Stateless Auth)",
+                    definition="प्रमाणीकरण जिसमें सर्वर को सत्र या सेशन डेटाबेस में स्टोर नहीं करना पड़ता; टोकन स्वयं संपूर्ण होता है।",
+                    example="Authorization: Bearer <token>",
+                ),
+            ]
+            verification = [
+                VerificationItem(
+                    id="chk-jwt-001",
+                    statement="कभी भी अनएन्क्रिप्टेड JWT पेलोड में पासवर्ड या निजी चाबियाँ जैसे संवेदनशील डेटा स्टोर न करें।",
+                    importance=VerificationImportance.MUST_KNOW,
+                    grounding=GroundingCategory.OBSERVED,
+                ),
+                VerificationItem(
+                    id="chk-jwt-002",
+                    statement="एल्गोरिदम भ्रम हमलों से बचने के लिए 'none' एल्गोरिदम को सख्ती से अस्वीकार करें।",
+                    importance=VerificationImportance.CAUTION,
+                    grounding=GroundingCategory.OBSERVED,
+                ),
+                VerificationItem(
+                    id="chk-jwt-003",
+                    statement="टोकन की समाप्ति अवधि (exp claim) हमेशा सत्यापित करें ताकि पुराने टोकन का दुरुपयोग न हो।",
+                    importance=VerificationImportance.MUST_KNOW,
+                    grounding=GroundingCategory.INFERRED,
+                ),
+            ]
+        elif lang == Language.HINGLISH:
+            lesson_title = "JSON Web Tokens (JWT) Architecture Seekhein"
+            chap1_title = "Core Architecture aur Token Structure"
+            chap1_summary = "Stateless authentication aur JWT ke teen main parts ki anatomy dekhein."
+            scene1_title = "JSON Web Token (JWT) kya hota hai?"
+            scene1_narration = "JSON Web Token do parties ke beech claims aur data transfer karne ka ek compact aur stateless standard format hai."
+            scene2_title = "Token Structure: Header, Payload aur Signature"
+            scene2_narration = "JWT mein teen parts hote hain dots se separated: Algorithm Header, Claims Payload, aur Cryptographic Signature."
+            chap2_title = "Authentication Flow aur Verification"
+            chap2_summary = "User login se lekar protected API resource par signature verification ka request flow samjhein."
+            scene3_title = "Stateless Request Authentication Flow"
+            scene3_narration = "Client Auth Server ko credentials bhejta hai, signed JWT receive karta hai, aur protected API endpoints par Bearer token ke saath access leta hai."
+            scene4_title = "Token Signature aur Expiration Verification"
+            scene4_narration = "Verification check confirm karta hai ki cryptographic signature payload hash se match ho raha hai aur token valid aur unexpired hai."
+            glossary = [
+                GlossaryEntry(
+                    term="JSON Web Token (JWT)",
+                    definition="Compact RFC 7519 standard jisse client aur server securely JSON claims exchange karte hain.",
+                    example="Authorization: Bearer <jwt_token>",
+                ),
+                GlossaryEntry(
+                    term="HMAC Signature",
+                    definition="Cryptographic hash jo header, payload aur secret key combine karke tamper-proofing provide karta hai.",
+                    example="HMACSHA256(base64(header) + '.' + base64(payload), secret)",
+                ),
+                GlossaryEntry(
+                    term="Bearer Token",
+                    definition="Security token jo holder ko protected resource access allow karta hai bina server session state ke.",
+                    example="Authorization: Bearer eyJhbGciOi...",
+                ),
+            ]
+            verification = [
+                VerificationItem(
+                    id="chk-jwt-001",
+                    statement="Confirm karein ki sensitive data jaise passwords kabhi JWT payload mein expose na ho.",
+                    importance=VerificationImportance.MUST_KNOW,
+                    grounding=GroundingCategory.OBSERVED,
+                ),
+                VerificationItem(
+                    id="chk-jwt-002",
+                    statement="Algorithm confusion attacks rokne ke liye 'none' alg aur weak keys ko reject karein.",
+                    importance=VerificationImportance.CAUTION,
+                    grounding=GroundingCategory.OBSERVED,
+                ),
+                VerificationItem(
+                    id="chk-jwt-003",
+                    statement="Verify karein ki exp (expiration) claim har incoming request par check hota hai.",
+                    importance=VerificationImportance.MUST_KNOW,
+                    grounding=GroundingCategory.INFERRED,
+                ),
+            ]
+        else:  # Default to English
+            lesson_title = "Understanding JSON Web Tokens (JWT)"
+            chap1_title = "Core Architecture & Token Structure"
+            chap1_summary = "Explore stateless authentication and the three-part anatomy of a JSON Web Token."
+            scene1_title = "What is a JSON Web Token?"
+            scene1_narration = "A JSON Web Token is a compact, URL-safe means of representing claims to be transferred between two parties in stateless authentication."
+            scene2_title = "Token Anatomy: Header, Payload & Signature"
+            scene2_narration = "A JWT consists of three base64url parts separated by dots: the algorithm header, the payload claims, and the cryptographic signature."
+            chap2_title = "Authentication Flow & Verification"
+            chap2_summary = "Trace the request lifecycle from user login to stateless signature verification on protected resources."
+            scene3_title = "Stateless Authentication Flow"
+            scene3_narration = "The client posts credentials to the Auth Server, receives a signed JWT, and presents it in the Authorization Bearer header to access Protected Resources."
+            scene4_title = "Verifying Token Signature & Claims"
+            scene4_narration = "Inspecting the verification output confirms that the cryptographic signature matches the payload hash and the token has not expired."
+            glossary = [
+                GlossaryEntry(
+                    term="JSON Web Token (JWT)",
+                    definition="A compact open standard (RFC 7519) for transmitting secure claims between parties as a JSON object.",
+                    example="Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                ),
+                GlossaryEntry(
+                    term="Cryptographic Signature",
+                    definition="A hash calculated from the base64url header and payload using a secret key to guarantee data integrity.",
+                    example="HMACSHA256(base64Url(header) + '.' + base64Url(payload), secret)",
+                ),
+                GlossaryEntry(
+                    term="Stateless Authentication",
+                    definition="An auth mechanism where the server does not persist session state; all identity claims are carried in the token.",
+                    example="Authorization: Bearer <token>",
+                ),
+            ]
+            verification = [
+                VerificationItem(
+                    id="chk-jwt-001",
+                    statement="Never store passwords, private keys, or sensitive credentials inside an unencrypted JWT payload.",
+                    importance=VerificationImportance.MUST_KNOW,
+                    grounding=GroundingCategory.OBSERVED,
+                ),
+                VerificationItem(
+                    id="chk-jwt-002",
+                    statement="Enforce strict server-side algorithm whitelisting to reject 'none' and insecure hashing algorithms.",
+                    importance=VerificationImportance.CAUTION,
+                    grounding=GroundingCategory.OBSERVED,
+                ),
+                VerificationItem(
+                    id="chk-jwt-003",
+                    statement="Always validate the expiration (exp) and issuer (iss) claims before accepting request context.",
+                    importance=VerificationImportance.MUST_KNOW,
+                    grounding=GroundingCategory.INFERRED,
+                ),
+            ]
+
+        jwt_s1_dur = max(estimate_duration_ms(scene1_narration, lang), 6000)
+        jwt_s2_dur = max(estimate_duration_ms(scene2_narration, lang), 7000)
+        jwt_s3_dur = max(estimate_duration_ms(scene3_narration, lang), 8000)
+        jwt_s4_dur = max(estimate_duration_ms(scene4_narration, lang), 6000)
+
+        s1_mid = jwt_s1_dur // 2
+        jwt_scene1 = Scene(
+            scene_id="jwt-scene-01-intro",
+            title=scene1_title,
+            narration_text=scene1_narration,
+            visual=VisualSpec(
+                scene_type=SceneType.TEXT,
+                highlighted_terms=["JWT", "stateless", "claims", "bearer token"],
+                animation_style=AnimationStyle.FADE_SLIDE,
+            ),
+            captions=[
+                Caption(
+                    offset_ms=0,
+                    duration_ms=s1_mid,
+                    text=scene1_narration[: len(scene1_narration) // 2].strip(),
+                ),
+                Caption(
+                    offset_ms=s1_mid,
+                    duration_ms=jwt_s1_dur - s1_mid,
+                    text=scene1_narration[len(scene1_narration) // 2 :].strip(),
+                ),
+            ],
+            uncertainty=UncertaintyLevel.NONE,
+            uncertainty_note=None,
+            grounding_category=GroundingCategory.OBSERVED,
+            what_to_verify=["Verify that tokens are transmitted strictly over TLS/HTTPS."],
+        )
+
+        s2_mid = jwt_s2_dur // 2
+        jwt_scene2 = Scene(
+            scene_id="jwt-scene-02-structure",
+            title=scene2_title,
+            narration_text=scene2_narration,
+            visual=VisualSpec(
+                scene_type=SceneType.CODE_DIFF,
+                before_code="// Encoded JWT String (header.payload.signature)\neyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTYiLCJuYW1lIjoiQWxpY2UiLCJyb2xlIjoiYWRtaW4ifQ.4z9sK7b3QJ8nO6p2L...",
+                after_code='// Decoded JWT JSON Structure\n{\n  "header": {\n    "alg": "HS256",\n    "typ": "JWT"\n  },\n  "payload": {\n    "sub": "123456",\n    "name": "Alice",\n    "role": "admin"\n  },\n  "signature": "HMACSHA256(base64Url(header) + \'.\' + base64Url(payload), secret)"\n}',
+                language="json",
+                highlighted_terms=["header", "payload", "signature", "HS256", "admin"],
+                animation_style=AnimationStyle.HIGHLIGHT_SWEEP,
+            ),
+            captions=[
+                Caption(
+                    offset_ms=0,
+                    duration_ms=s2_mid,
+                    text=scene2_narration[: len(scene2_narration) // 2].strip(),
+                ),
+                Caption(
+                    offset_ms=s2_mid,
+                    duration_ms=jwt_s2_dur - s2_mid,
+                    text=scene2_narration[len(scene2_narration) // 2 :].strip(),
+                ),
+            ],
+            uncertainty=UncertaintyLevel.NONE,
+            uncertainty_note=None,
+            grounding_category=GroundingCategory.OBSERVED,
+            what_to_verify=["Verify token payload contains no secret keys or passwords."],
+        )
+
+        jwt_chap1 = Chapter(
+            chapter_id="jwt-chap-01-structure",
+            title=chap1_title,
+            summary=chap1_summary,
+            scenes=[jwt_scene1, jwt_scene2],
+        )
+
+        s3_mid = jwt_s3_dur // 2
+        jwt_scene3 = Scene(
+            scene_id="jwt-scene-03-flow",
+            title=scene3_title,
+            narration_text=scene3_narration,
+            visual=VisualSpec(
+                scene_type=SceneType.DIAGRAM,
+                mermaid_definition="graph LR\n  Client[Client App] -->|1. Credentials| AuthServer[Auth Server]\n  AuthServer -->|2. Issues Signed JWT| Client\n  Client -->|3. Bearer Token| ResourceAPI[Resource API]\n  ResourceAPI -->|4. Verify Signature| ProtectedData[(Protected Resource)]",
+                highlighted_terms=["Client App", "Auth Server", "Resource API", "Bearer Token", "Protected Resource"],
+                animation_style=AnimationStyle.FADE_SLIDE,
+            ),
+            captions=[
+                Caption(
+                    offset_ms=0,
+                    duration_ms=s3_mid,
+                    text=scene3_narration[: len(scene3_narration) // 2].strip(),
+                ),
+                Caption(
+                    offset_ms=s3_mid,
+                    duration_ms=jwt_s3_dur - s3_mid,
+                    text=scene3_narration[len(scene3_narration) // 2 :].strip(),
+                ),
+            ],
+            uncertainty=UncertaintyLevel.NONE,
+            uncertainty_note=None,
+            grounding_category=GroundingCategory.INFERRED,
+            what_to_verify=["Verify secret key rotation and shared key security."],
+        )
+
+        s4_mid = jwt_s4_dur // 2
+        jwt_scene4 = Scene(
+            scene_id="jwt-scene-04-verify",
+            title=scene4_title,
+            narration_text=scene4_narration,
+            visual=VisualSpec(
+                scene_type=SceneType.TERMINAL,
+                command="jwt verify --token $TOKEN --secret $SECRET_KEY",
+                output="Signature Status: VALID (alg=HS256, sub=123456, exp=valid)",
+                exit_code=0,
+                highlighted_terms=["Signature Status", "VALID", "HS256", "exp=valid"],
+                animation_style=AnimationStyle.TYPEWRITER,
+            ),
+            captions=[
+                Caption(
+                    offset_ms=0,
+                    duration_ms=s4_mid,
+                    text=scene4_narration[: len(scene4_narration) // 2].strip(),
+                ),
+                Caption(
+                    offset_ms=s4_mid,
+                    duration_ms=jwt_s4_dur - s4_mid,
+                    text=scene4_narration[len(scene4_narration) // 2 :].strip(),
+                ),
+            ],
+            uncertainty=UncertaintyLevel.LOW,
+            uncertainty_note="Local verification requires server secret or public key certificate.",
+            grounding_category=GroundingCategory.NEEDS_VERIFICATION,
+            what_to_verify=["Ensure server clock skew is within acceptable tolerance."],
+        )
+
+        jwt_chap2 = Chapter(
+            chapter_id="jwt-chap-02-auth",
+            title=chap2_title,
+            summary=chap2_summary,
+            scenes=[jwt_scene3, jwt_scene4],
+        )
+
+        jwt_total_dur = jwt_s1_dur + jwt_s2_dur + jwt_s3_dur + jwt_s4_dur
+
+        return Lesson(
+            lesson_id="lesson-fixture-jwt",
+            title=lesson_title,
+            language=lang,
+            content_type=request.content_type,
+            total_estimated_duration_ms=jwt_total_dur,
+            chapters=[jwt_chap1, jwt_chap2],
+            glossary=glossary,
+            verification_checklist=verification,
+            gemini_model_version="gemini-3.8-flash",
+            generated_at=datetime.now(UTC).isoformat(),
+        )
+
+    def build_python_fixture(self, request: LessonRequest) -> Lesson:
+        """Construct the Python list comprehension fixture tailored to the requested language."""
         lang = request.language
 
         if lang == Language.HI:

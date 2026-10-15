@@ -146,6 +146,9 @@ export const useLessonStore = create<LessonState>((set, get) => ({
       activeSceneIndex: 0,
       sceneElapsedMs: 0,
       currentCaptionText: '',
+      activeHighlightTerm: null,
+      activeSegmentIndex: 0,
+      seekTargetMs: null,
       activeSceneDurationMs: null,
       audioError: null,
       isPlaying: true,
@@ -162,6 +165,9 @@ export const useLessonStore = create<LessonState>((set, get) => ({
         activeSceneIndex: activeSceneIndex + 1,
         sceneElapsedMs: 0,
         currentCaptionText: '',
+        activeHighlightTerm: null,
+        activeSegmentIndex: 0,
+        seekTargetMs: null,
         activeSceneDurationMs: null,
         audioError: null,
       });
@@ -174,6 +180,9 @@ export const useLessonStore = create<LessonState>((set, get) => ({
         activeSceneIndex: 0,
         sceneElapsedMs: 0,
         currentCaptionText: '',
+        activeHighlightTerm: null,
+        activeSegmentIndex: 0,
+        seekTargetMs: null,
         activeSceneDurationMs: null,
         audioError: null,
       });
@@ -181,7 +190,7 @@ export const useLessonStore = create<LessonState>((set, get) => ({
     }
 
     // Reached the end of the lesson
-    set({ isPlaying: false, sceneElapsedMs: 0 });
+    set({ isPlaying: false, sceneElapsedMs: 0, activeHighlightTerm: null });
     return false;
   },
 
@@ -194,6 +203,9 @@ export const useLessonStore = create<LessonState>((set, get) => ({
         activeSceneIndex: activeSceneIndex - 1,
         sceneElapsedMs: 0,
         currentCaptionText: '',
+        activeHighlightTerm: null,
+        activeSegmentIndex: 0,
+        seekTargetMs: null,
         activeSceneDurationMs: null,
         audioError: null,
       });
@@ -207,6 +219,9 @@ export const useLessonStore = create<LessonState>((set, get) => ({
         activeSceneIndex: prevChapter.scenes.length - 1,
         sceneElapsedMs: 0,
         currentCaptionText: '',
+        activeHighlightTerm: null,
+        activeSegmentIndex: 0,
+        seekTargetMs: null,
         activeSceneDurationMs: null,
         audioError: null,
       });
@@ -224,6 +239,9 @@ export const useLessonStore = create<LessonState>((set, get) => ({
       activeSceneIndex: 0,
       sceneElapsedMs: 0,
       currentCaptionText: '',
+      activeHighlightTerm: null,
+      activeSegmentIndex: 0,
+      seekTargetMs: null,
       activeSceneDurationMs: null,
       audioError: null,
     });
@@ -240,6 +258,9 @@ export const useLessonStore = create<LessonState>((set, get) => ({
       activeSceneIndex: sceneIndex,
       sceneElapsedMs: 0,
       currentCaptionText: '',
+      activeHighlightTerm: null,
+      activeSegmentIndex: 0,
+      seekTargetMs: null,
       activeSceneDurationMs: null,
       audioError: null,
     });

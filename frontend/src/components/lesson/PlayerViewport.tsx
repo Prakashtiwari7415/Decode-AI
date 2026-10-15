@@ -24,42 +24,42 @@ export const PlayerViewport: React.FC = () => {
 
   if (!lesson || !scene || !currentChapter) {
     return (
-      <div className="w-full aspect-video min-h-[380px] rounded-t-xl bg-slate-950 flex items-center justify-center border border-slate-800 text-slate-500">
+      <div className="w-full aspect-video min-h-[380px] rounded-t-xl bg-slate-950 flex items-center justify-center border border-slate-800 text-slate-500 text-sm">
         No active lesson scene loaded.
       </div>
     );
   }
 
   const handleViewportClick = (e: React.MouseEvent) => {
-    // Avoid toggling play if clicking inside interactive buttons or code copy buttons
+    // Avoid toggling play if clicking inside interactive buttons or controls
     const target = e.target as HTMLElement;
     if (target.closest('button') || target.closest('select') || target.closest('input')) {
       return;
     }
     togglePlay();
     setShowPlayIconNotice(true);
-    setTimeout(() => setShowPlayIconNotice(false), 600);
+    setTimeout(() => setShowPlayIconNotice(false), 500);
   };
 
   return (
     <div
       onClick={handleViewportClick}
-      className="relative w-full aspect-video min-h-[380px] max-h-[640px] rounded-t-xl bg-slate-950 border border-slate-800 shadow-2xl overflow-hidden flex flex-col justify-between cursor-pointer group"
+      className="relative w-full aspect-video min-h-[380px] max-h-[640px] rounded-t-xl bg-slate-950 border border-slate-800 shadow-2xl overflow-hidden flex flex-col justify-between cursor-pointer group select-none"
     >
       {/* Top Header Overlay */}
-      <div className="relative z-20 px-4 py-3 bg-gradient-to-b from-slate-950/95 via-slate-950/60 to-transparent flex items-center justify-between gap-2 pointer-events-none">
+      <div className="relative z-20 px-4 py-2.5 bg-gradient-to-b from-slate-950/95 via-slate-950/70 to-transparent flex items-center justify-between gap-2 pointer-events-none">
         {/* Chapter & Scene Indicator */}
-        <div className="flex items-center gap-2 flex-wrap text-xs">
-          <span className="px-2.5 py-1 rounded-md bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 font-semibold uppercase tracking-wider text-[10px]">
+        <div className="flex items-center gap-2 text-xs truncate">
+          <span className="px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 font-semibold text-[11px]">
             Ch {activeChapterIndex + 1}/{lesson.chapters.length}: {currentChapter.title}
           </span>
-          <span className="text-slate-400 font-medium">
-            Scene {activeSceneIndex + 1}/{currentChapter.scenes.length}: {scene.title}
+          <span className="text-slate-300 font-medium truncate text-xs">
+            Scene {activeSceneIndex + 1}: {scene.title}
           </span>
         </div>
 
-        {/* Status Pills: Fixture vs AI Badge, Audio Mode, Uncertainty Badge & Playback State */}
-        <div className="flex items-center gap-2 pointer-events-auto flex-wrap justify-end">
+        {/* Status Indicators */}
+        <div className="flex items-center gap-2 pointer-events-auto shrink-0 flex-wrap justify-end">
           {lesson.lesson_id.includes('fixture') ? (
             <span className="px-2 py-0.5 rounded-full bg-slate-800/90 border border-slate-700 text-slate-300 text-[10px] font-mono font-semibold flex items-center gap-1">
               <span>📌</span> Fixture Demo
@@ -70,89 +70,49 @@ export const PlayerViewport: React.FC = () => {
             </span>
           )}
 
+          {/* Grounding Level */}
+          {scene.grounding_category && (
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-semibold flex items-center gap-1 ${
+                scene.grounding_category === 'observed'
+                  ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
+                  : scene.grounding_category === 'inferred'
+                  ? 'bg-cyan-500/10 border border-cyan-500/30 text-cyan-300'
+                  : 'bg-amber-500/10 border border-amber-500/30 text-amber-300'
+              }`}
+              title={`Evidence grounding: ${scene.grounding_category}`}
+            >
+              <span>{scene.grounding_category === 'observed' ? '🔍' : scene.grounding_category === 'inferred' ? '💡' : '⚠️'}</span>
+              <span className="capitalize hidden sm:inline">
+                {scene.grounding_category === 'needs_verification'
+                  ? 'Verify'
+                  : scene.grounding_category}
+              </span>
+            </span>
+          )}
+
           {/* Voice Narration Mode Pill */}
           {audioLoading ? (
-            <span className="px-2 py-0.5 rounded-full bg-indigo-900/50 border border-indigo-500/50 text-cyan-300 text-[10px] font-mono font-semibold flex items-center gap-1.5 animate-pulse">
+            <span className="px-2 py-0.5 rounded-full bg-indigo-900/40 border border-indigo-500/40 text-cyan-300 text-[10px] font-mono flex items-center gap-1.5 animate-pulse">
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
               Generating Voice...
             </span>
           ) : captionOnlyFallback || !narrationEnabled ? (
-            <span className="px-2 py-0.5 rounded-full bg-amber-950/60 border border-amber-800/60 text-amber-300 text-[10px] font-mono font-semibold flex items-center gap-1">
+            <span className="px-2 py-0.5 rounded-full bg-slate-800/90 border border-slate-700 text-slate-300 text-[10px] font-medium flex items-center gap-1">
               <span>💬</span> Caption Only
             </span>
           ) : (
-            <span className="px-2 py-0.5 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 text-[10px] font-mono font-semibold flex items-center gap-1">
+            <span className="px-2 py-0.5 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 text-[10px] font-medium flex items-center gap-1">
               <span>🎙️</span> {selectedVoice}
             </span>
           )}
 
-          {/* Grounding / Evidence Level Pill */}
-          {scene.grounding_category && (
-            <div className="relative group/grounding">
-              <span
-                className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 cursor-help ${
-                  scene.grounding_category === 'observed'
-                    ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300'
-                    : scene.grounding_category === 'inferred'
-                    ? 'bg-cyan-500/20 border border-cyan-500/40 text-cyan-300'
-                    : 'bg-amber-500/20 border border-amber-500/40 text-amber-300'
-                }`}
-              >
-                <span>
-                  {scene.grounding_category === 'observed'
-                    ? '🔍'
-                    : scene.grounding_category === 'inferred'
-                    ? '💡'
-                    : '⚠️'}
-                </span>
-                <span className="capitalize">
-                  {scene.grounding_category === 'needs_verification'
-                    ? 'Needs Verification'
-                    : scene.grounding_category}
-                </span>
-              </span>
-              <div className="opacity-0 group-hover/grounding:opacity-100 transition-opacity absolute right-0 top-6 w-56 p-2 rounded-lg bg-slate-900 border border-slate-700 text-[11px] text-slate-200 shadow-2xl z-30 pointer-events-none">
-                {scene.grounding_category === 'observed' && (
-                  <p>
-                    <strong className="text-emerald-400">Observed Fact:</strong> Directly present in
-                    your pasted code, prompt, or terminal error.
-                  </p>
-                )}
-                {scene.grounding_category === 'inferred' && (
-                  <p>
-                    <strong className="text-cyan-400">Inferred Deduction:</strong> Plausible
-                    technical explanation deduced from visible code patterns.
-                  </p>
-                )}
-                {scene.grounding_category === 'needs_verification' && (
-                  <p>
-                    <strong className="text-amber-400">Needs Verification:</strong> Hypothesis
-                    requiring independent local checks, missing dependencies, or tests.
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {scene.uncertainty !== 'none' && (
-            <div className="relative group/uncertainty">
-              <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-bold flex items-center gap-1 cursor-help">
-                <span>⚠️</span>
-                <span className="uppercase">{scene.uncertainty} Uncertainty</span>
-              </span>
-              {scene.uncertainty_note && (
-                <div className="opacity-0 group-hover/uncertainty:opacity-100 transition-opacity absolute right-0 top-6 w-60 p-2.5 rounded-lg bg-slate-900 border border-amber-600/40 text-[11px] text-amber-200 shadow-2xl z-30 pointer-events-none">
-                  {scene.uncertainty_note}
-                </div>
-              )}
-            </div>
-          )}
-
+          {/* Playing / Paused Indicator */}
           <span
             className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold flex items-center gap-1.5 ${
               isPlaying
                 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                : 'bg-slate-800 text-slate-400'
+                : 'bg-slate-800/80 text-slate-400 border border-slate-700/60'
             }`}
           >
             <span
@@ -165,21 +125,21 @@ export const PlayerViewport: React.FC = () => {
         </div>
       </div>
 
-      {/* Center Scene Rendering Area */}
+      {/* Center Scene Rendering Canvas */}
       <div className="relative z-10 flex-1 w-full h-full p-2 sm:p-4 overflow-hidden flex items-center justify-center">
         <SceneRenderer scene={scene} />
       </div>
 
-      {/* Floating Center Play/Pause Flash Animation on click */}
+      {/* Floating Center Play/Pause Flash Animation */}
       {showPlayIconNotice && (
-        <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none bg-slate-950/20 backdrop-blur-[2px] transition-all">
-          <div className="p-4 rounded-full bg-slate-900/90 border border-slate-700 text-white shadow-2xl animate-ping scale-125">
+        <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none bg-slate-950/20 backdrop-blur-[1px] transition-all">
+          <div className="p-3.5 rounded-full bg-slate-900/90 border border-slate-700 text-white shadow-2xl scale-110">
             {isPlaying ? (
-              <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+              <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z" />
               </svg>
             ) : (
-              <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+              <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
               </svg>
             )}
@@ -187,7 +147,7 @@ export const PlayerViewport: React.FC = () => {
         </div>
       )}
 
-      {/* Bottom Subtitle / Caption Overlay */}
+      {/* Bottom Subtitle Caption Strip */}
       <CaptionOverlay />
     </div>
   );

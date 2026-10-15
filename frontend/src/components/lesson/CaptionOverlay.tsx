@@ -9,9 +9,9 @@ export const CaptionOverlay: React.FC = () => {
   }
 
   return (
-    <div className="absolute bottom-4 left-4 right-4 z-20 pointer-events-none flex justify-center">
-      <div className="max-w-2xl px-5 py-2.5 rounded-xl bg-slate-950/85 backdrop-blur-md border border-slate-700/50 shadow-2xl text-center">
-        <p className="text-sm md:text-base font-medium text-slate-100 tracking-wide leading-relaxed drop-shadow-md">
+    <div className="absolute bottom-3 left-4 right-4 z-20 pointer-events-none flex justify-center">
+      <div className="max-w-2xl px-4 py-2 rounded-lg bg-slate-950/90 backdrop-blur-md border border-slate-800/80 shadow-xl text-center transition-all">
+        <p className="text-xs sm:text-sm font-medium text-slate-100 tracking-wide leading-relaxed">
           {currentCaptionText}
         </p>
       </div>

@@ -14,7 +14,7 @@ export const SceneRenderer: React.FC<SceneRendererProps> = ({ scene }) => {
 
   switch (visual.scene_type) {
     case 'diagram':
-      return <ArchitectureScene visual={visual} title={title} />;
+      return <ArchitectureScene visual={visual} title={title} narrationText={scene.narration_text} />;
     case 'code_diff':
       return <CodeDiffScene visual={visual} title={title} />;
     case 'terminal':
@@ -22,6 +22,13 @@ export const SceneRenderer: React.FC<SceneRendererProps> = ({ scene }) => {
     case 'text':
     case 'comparison':
     default:
-      return <TextConceptScene visual={visual} title={title} />;
+      return (
+        <TextConceptScene
+          visual={visual}
+          title={title}
+          narrationText={scene.narration_text}
+          whatToVerify={scene.what_to_verify}
+        />
+      );
   }
 };

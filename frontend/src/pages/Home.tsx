@@ -98,15 +98,25 @@ export const Home: React.FC = () => {
     await fetchLesson(payload);
   };
 
-  const handleLoadSampleFixture = async (langChoice: Language = 'en') => {
+  const [demoTopic, setDemoTopic] = useState<'jwt' | 'python'>('jwt');
+
+  const handleLoadSampleFixture = async (langChoice: Language = 'en', forceTopic?: 'jwt' | 'python') => {
+    const selected = forceTopic || demoTopic;
+    const isJwt = selected === 'jwt' || content.toLowerCase().includes('jwt') || content.toLowerCase().includes('token');
+
+    const sampleContent = isJwt
+      ? 'Explain JSON Web Tokens (JWT), token anatomy (header, payload, signature), and stateless request authentication.'
+      : 'def transform_items(items):\n    return [x * 2 for x in items]';
+
     const payload: LessonRequest = {
-      content: 'def transform_items(items):\n    return [x * 2 for x in items]',
+      content: sampleContent,
       content_type: 'explanation',
       language: langChoice,
       detail_level: 'standard',
       use_fixture: true, // Offline deterministic fixture
     };
     setLanguage(langChoice);
+    setContent(sampleContent);
     await fetchLesson(payload);
   };
 
@@ -162,9 +172,33 @@ export const Home: React.FC = () => {
 
             {/* Quick-Start Sample Cards */}
             <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div>
+              <div className="space-y-1">
                 <h3 className="text-sm font-bold text-slate-200">Predefined Demo Lessons</h3>
-                <p className="text-xs text-slate-400">Instant offline test fixtures (no API key required)</p>
+                <div className="flex items-center gap-1.5 pt-0.5">
+                  <span className="text-[11px] text-slate-400">Topic:</span>
+                  <button
+                    type="button"
+                    onClick={() => setDemoTopic('jwt')}
+                    className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors ${
+                      demoTopic === 'jwt'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    JWT Auth
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDemoTopic('python')}
+                    className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors ${
+                      demoTopic === 'python'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Python Loops
+                  </button>
+                </div>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 <button
@@ -347,7 +381,14 @@ export const Home: React.FC = () => {
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleLoadSampleFixture(language)}
+                        onClick={() =>
+                          handleLoadSampleFixture(
+                            language,
+                            content.toLowerCase().includes('jwt') || content.toLowerCase().includes('token')
+                              ? 'jwt'
+                              : 'python'
+                          )
+                        }
                         className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors"
                       >
                         💡 Load Demo Fixture Instead

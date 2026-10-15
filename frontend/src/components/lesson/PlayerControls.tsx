@@ -46,6 +46,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
     setPlaybackSpeed,
     setSelectedVoice,
     setNarrationEnabled,
+    setAudioError,
     setCaptionOnlyFallback,
   } = useLessonStore();
 
@@ -92,12 +93,21 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
       )}
 
       {audioError && !audioLoading && (
-        <div className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-amber-950/60 border border-amber-800/60 text-xs text-amber-200">
+        <div className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-amber-950/50 border border-amber-800/60 text-xs text-amber-200">
           <div className="flex items-center gap-2 overflow-hidden">
-            <span>⚠️</span>
+            <span>ℹ️</span>
             <span className="truncate">{audioError}</span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => {
+                setAudioError(null);
+                setNarrationEnabled(true);
+              }}
+              className="px-2 py-0.5 rounded bg-amber-900/60 hover:bg-amber-800 text-[11px] text-amber-100 font-medium transition-colors"
+            >
+              Retry Audio
+            </button>
             <button
               onClick={() => setCaptionOnlyFallback(true)}
               className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 transition-colors"

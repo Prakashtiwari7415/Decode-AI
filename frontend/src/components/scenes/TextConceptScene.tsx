@@ -5,14 +5,23 @@ import { useLessonStore } from '../../stores/lessonStore';
 interface TextConceptSceneProps {
   visual: VisualSpec;
   title: string;
+  narrationText?: string;
+  whatToVerify?: string[];
 }
 
-export const TextConceptScene: React.FC<TextConceptSceneProps> = ({ visual, title }) => {
+export const TextConceptScene: React.FC<TextConceptSceneProps> = ({
+  visual,
+  title,
+  narrationText,
+  whatToVerify,
+}) => {
   const { activeHighlightTerm, setActiveHighlightTerm } = useLessonStore();
+
+  const explanation = narrationText || 'Understanding key architectural concepts and design patterns.';
 
   return (
     <div className="w-full h-full flex flex-col justify-between p-6 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 rounded-xl overflow-hidden select-none">
-      {/* Header */}
+      {/* Top Header */}
       <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-indigo-400" />
@@ -23,40 +32,61 @@ export const TextConceptScene: React.FC<TextConceptSceneProps> = ({ visual, titl
         <span className="text-xs text-slate-400 font-mono">Foundations</span>
       </div>
 
-      {/* Main Content Card */}
-      <div className="my-auto max-w-2xl mx-auto w-full space-y-5">
+      {/* Main Concept Card */}
+      <div className="my-auto max-w-3xl mx-auto w-full space-y-5">
         <div className="p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl space-y-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-xl text-indigo-400 font-bold">
+            <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-xl text-indigo-400 font-bold shrink-0">
               💡
             </div>
             <div>
               <h3 className="text-lg font-bold text-slate-100">{title}</h3>
-              <p className="text-xs text-slate-400">Declarative, readable data transformations in Python</p>
+              <p className="text-xs text-slate-400">Core architectural principle & technical objective</p>
             </div>
           </div>
 
-          <p className="text-sm text-slate-300 leading-relaxed">
-            Instead of manually creating an empty list, looping over elements, and pushing transformed items via{' '}
-            <code className="text-purple-300 bg-purple-950/40 px-1.5 py-0.5 rounded font-mono text-xs">.append()</code>,
-            a comprehension declares the transformation in a single concise mathematical expression.
+          <p className="text-sm text-slate-300 leading-relaxed font-sans">
+            {explanation}
           </p>
 
-          {/* Key Principles Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-            <div className="p-3 rounded-lg bg-slate-950/80 border border-slate-800/80 space-y-1">
-              <span className="text-xs font-bold text-indigo-400 block">1. Conciseness</span>
-              <p className="text-[11px] text-slate-400">Replaces multi-line boilerplate with one line</p>
+          {/* Key Principles Grid derived from highlighted terms or verification checks */}
+          {visual.highlighted_terms.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+              {visual.highlighted_terms.slice(0, 3).map((term, idx) => {
+                const borderColors = [
+                  'border-indigo-800/80 text-indigo-400',
+                  'border-cyan-800/80 text-cyan-400',
+                  'border-emerald-800/80 text-emerald-400',
+                ];
+                const colorClass = borderColors[idx % borderColors.length];
+
+                return (
+                  <div
+                    key={term}
+                    className="p-3 rounded-lg bg-slate-950/80 border border-slate-800/80 space-y-1"
+                  >
+                    <span className={`text-xs font-bold block ${colorClass.split(' ')[1]}`}>
+                      {idx + 1}. {term}
+                    </span>
+                    <p className="text-[11px] text-slate-400">
+                      Key architectural concept highlighted in current scene.
+                    </p>
+                  </div>
+                );
+              })}
             </div>
-            <div className="p-3 rounded-lg bg-slate-950/80 border border-slate-800/80 space-y-1">
-              <span className="text-xs font-bold text-cyan-400 block">2. Performance</span>
-              <p className="text-[11px] text-slate-400">Executes at C-speed in the Python virtual machine</p>
+          )}
+
+          {/* Verification Advice if available */}
+          {whatToVerify && whatToVerify.length > 0 && (
+            <div className="p-3 rounded-lg bg-indigo-950/30 border border-indigo-900/40 text-xs text-indigo-300 flex items-start gap-2">
+              <span className="shrink-0 text-indigo-400">🔍</span>
+              <div>
+                <strong className="text-slate-200">Recommended Check:</strong>{' '}
+                {whatToVerify[0]}
+              </div>
             </div>
-            <div className="p-3 rounded-lg bg-slate-950/80 border border-slate-800/80 space-y-1">
-              <span className="text-xs font-bold text-emerald-400 block">3. Immutability</span>
-              <p className="text-[11px] text-slate-400">Creates a fresh list without mutating source</p>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
