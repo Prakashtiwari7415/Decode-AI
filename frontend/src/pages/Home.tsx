@@ -98,9 +98,7 @@ function classifyError(status: number | null, rawMessage: string): ErrorClassifi
 export const Home: React.FC = () => {
   const { lesson, setLesson } = useLessonStore();
 
-  const [content, setContent] = useState<string>(
-    '# Traditional vs Modern Python Loop\nresult = []\nfor x in items:\n    result.append(x * 2)'
-  );
+  const [content, setContent] = useState<string>('');
   const [contentType, setContentType] = useState<ContentType>('explanation');
   const [language, setLanguage] = useState<Language>('en');
   const [detailLevel, setDetailLevel] = useState<DetailLevel>('standard');

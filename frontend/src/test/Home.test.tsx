@@ -79,8 +79,10 @@ describe('Home Page — Product UX & Failure Recovery', () => {
     expect(screen.queryByText(/Powered by Gemini 3.8 Flash/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Generate with Gemini/i)).not.toBeInTheDocument();
 
-    // Character limit indicator
-    expect(screen.getByText(/\/ 20,000 chars/i)).toBeInTheDocument();
+    // Initial empty input state and character limit indicator
+    const textarea = screen.getByRole('textbox', { name: /Paste Code/i }) as HTMLTextAreaElement;
+    expect(textarea.value).toBe('');
+    expect(screen.getByText(/0 \/ 20,000 chars/i)).toBeInTheDocument();
   });
 
   it('validates minimum input length and shows inline error without calling API', async () => {
