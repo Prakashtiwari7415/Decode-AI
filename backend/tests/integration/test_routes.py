@@ -15,6 +15,7 @@ from app.services.gemini_client import (  # noqa: E402
     GeminiRateLimitError,
     GeminiTimeoutError,
 )
+from app.services.groq_client import GroqClient, GroqError  # noqa: E402
 
 client = TestClient(app)
 
@@ -136,7 +137,7 @@ def test_generate_lesson_missing_key_returns_401() -> None:
 
 
 def test_generate_lesson_rate_limit_returns_429() -> None:
-    """Verify provider rate limit error returns RFC 9457 429."""
+    """Verify provider rate limit error returns RFC 9457 429 when fallback is unavailable."""
     payload = {
         "content": "def binary_search(arr, x): pass",
         "content_type": "explanation",
@@ -149,15 +150,71 @@ def test_generate_lesson_rate_limit_returns_429() -> None:
         "app.services.gemini_client.GeminiClient.generate_lesson",
         new_callable=AsyncMock,
         side_effect=GeminiRateLimitError("Rate limit exceeded"),
-    ):
+    ), patch.object(GroqClient, "is_configured", return_value=False):
         response = client.post("/api/lessons/generate", json=payload)
         assert response.status_code == 429
         data = response.json()
         assert data["status"] == 429
 
 
+def test_generate_lesson_gemini_429_groq_fallback_succeeds() -> None:
+    """Verify Gemini 429 triggers Groq fallback and returns 200 with Server-Timing."""
+    payload = {
+        "content": "def binary_search(arr, x): pass",
+        "content_type": "explanation",
+        "language": "en",
+        "detail_level": "standard",
+        "use_fixture": False,
+    }
+
+    mock_groq_lesson = Lesson.model_validate(MOCK_GENERATED_LESSON)
+    mock_groq_lesson.gemini_model_version = "groq/openai/gpt-oss-120b"
+
+    with patch(
+        "app.services.gemini_client.GeminiClient.generate_lesson",
+        new_callable=AsyncMock,
+        side_effect=GeminiRateLimitError("Rate limit exceeded"),
+    ), patch(
+        "app.services.groq_client.GroqClient.generate_lesson",
+        new_callable=AsyncMock,
+        return_value=mock_groq_lesson,
+    ), patch.object(GroqClient, "is_configured", return_value=True):
+        response = client.post("/api/lessons/generate", json=payload)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["gemini_model_version"] == "groq/openai/gpt-oss-120b"
+        assert "Server-Timing" in response.headers
+        assert "groq;dur=" in response.headers["Server-Timing"]
+
+
+def test_generate_lesson_both_providers_fail_returns_502() -> None:
+    """Verify when both Gemini and Groq fail, safe 502 error is returned."""
+    payload = {
+        "content": "def binary_search(arr, x): pass",
+        "content_type": "explanation",
+        "language": "en",
+        "detail_level": "standard",
+        "use_fixture": False,
+    }
+
+    with patch(
+        "app.services.gemini_client.GeminiClient.generate_lesson",
+        new_callable=AsyncMock,
+        side_effect=GeminiRateLimitError("Gemini 429"),
+    ), patch(
+        "app.services.groq_client.GroqClient.generate_lesson",
+        new_callable=AsyncMock,
+        side_effect=GroqError("Groq 500"),
+    ), patch.object(GroqClient, "is_configured", return_value=True):
+        response = client.post("/api/lessons/generate", json=payload)
+        assert response.status_code == 502
+        data = response.json()
+        assert data["status"] == 502
+        assert "Both primary and fallback" in data["detail"]
+
+
 def test_generate_lesson_timeout_returns_504() -> None:
-    """Verify provider timeout error returns RFC 9457 504."""
+    """Verify provider timeout error returns RFC 9457 504 when fallback is unavailable."""
     payload = {
         "content": "def binary_search(arr, x): pass",
         "content_type": "explanation",
@@ -170,7 +227,7 @@ def test_generate_lesson_timeout_returns_504() -> None:
         "app.services.gemini_client.GeminiClient.generate_lesson",
         new_callable=AsyncMock,
         side_effect=GeminiTimeoutError("Request timed out"),
-    ):
+    ), patch.object(GroqClient, "is_configured", return_value=False):
         response = client.post("/api/lessons/generate", json=payload)
         assert response.status_code == 504
         data = response.json()

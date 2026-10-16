@@ -4,14 +4,12 @@ import asyncio
 import json
 import logging
 import time
-import uuid
-from datetime import UTC, datetime
 
 from google import genai
 from google.genai import errors, types
 
-from app.models.lesson import Caption, Lesson
-from app.services.quality_validator import validate_and_sanitize_lesson_quality
+from app.models.lesson import Lesson
+from app.services.quality_validator import enrich_and_validate_lesson
 
 logger = logging.getLogger("decodeai.gemini")
 
@@ -42,6 +40,16 @@ class GeminiRateLimitError(GeminiError):
     ) -> None:
         super().__init__(detail=detail, status_code=429)
         self.retry_after = retry_after
+
+
+class GeminiServiceUnavailableError(GeminiError):
+    """Raised when Gemini service is temporarily unavailable (HTTP 503)."""
+
+    def __init__(
+        self,
+        detail: str = "Google Gemini service is temporarily unavailable (503). Please retry.",
+    ) -> None:
+        super().__init__(detail=detail, status_code=503)
 
 
 class GeminiTimeoutError(GeminiError):
@@ -75,7 +83,7 @@ class GeminiClient:
     ) -> None:
         self.api_key = api_key.strip() if api_key else ""
         self.model_name = model
-        self.fallback_models = fallback_models or ["gemini-2.5-flash", "gemini-3-flash-preview"]
+        self.fallback_models = fallback_models or []
         self.timeout_seconds = timeout_seconds
 
         # Instantiate google-genai Client
@@ -161,13 +169,10 @@ class GeminiClient:
                     candidate_model,
                     exc.message,
                 )
-                if exc.code == 503 and idx < len(models_to_try) - 1:
-                    logger.warning(
-                        "Model %s returned 503 high demand; falling back to %s",
-                        candidate_model,
-                        models_to_try[idx + 1],
-                    )
-                    continue
+                if exc.code == 503:
+                    raise GeminiServiceUnavailableError(
+                        "Google Gemini service is temporarily unavailable (503). High demand."
+                    ) from exc
                 if exc.code in (401, 403):
                     raise GeminiAuthError(
                         "Gemini API authentication failed. Verify that GEMINI_API_KEY is valid."
@@ -176,7 +181,7 @@ class GeminiClient:
                     raise GeminiRateLimitError(
                         "Gemini API rate limit or quota exceeded. Please retry in a few moments."
                     ) from exc
-                if exc.code in (500, 502, 503, 504):
+                if exc.code in (500, 502, 504):
                     raise GeminiError(
                         detail="Google Gemini service is temporarily unavailable. Please retry.",
                         status_code=502,
@@ -249,35 +254,8 @@ class GeminiClient:
         user_content: str | None = None,
     ) -> Lesson:
         """Enrich model output with backend-verified identifiers, timestamps, and duration calculations."""
-        # 1. Lesson ID
-        if not lesson.lesson_id or lesson.lesson_id.startswith("string"):
-            lesson.lesson_id = f"lesson-ai-{uuid.uuid4().hex[:8]}"
-
-        # 2. Metadata
-        lesson.gemini_model_version = used_model or self.model_name
-        lesson.generated_at = datetime.now(UTC).isoformat()
-
-        # 3. Ensure valid captions and calculate total duration
-        total_duration = 0
-        for chapter in lesson.chapters:
-            for scene in chapter.scenes:
-                # If model omitted captions, generate fallback caption slices from narration
-                if not scene.captions:
-                    scene.captions = [
-                        Caption(
-                            offset_ms=0,
-                            duration_ms=5000,
-                            text=scene.narration_text.strip() or scene.title,
-                        )
-                    ]
-                scene_duration = max(
-                    sum(c.duration_ms for c in scene.captions),
-                    max(c.offset_ms + c.duration_ms for c in scene.captions),
-                    4000,
-                )
-                total_duration += scene_duration
-
-        lesson.total_estimated_duration_ms = total_duration
-
-        # 4. Deterministic quality and evidence grounding validation
-        return validate_and_sanitize_lesson_quality(lesson, user_content=user_content)
+        return enrich_and_validate_lesson(
+            lesson=lesson,
+            model_version=used_model or self.model_name,
+            user_content=user_content,
+        )

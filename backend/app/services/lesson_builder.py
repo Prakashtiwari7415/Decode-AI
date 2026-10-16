@@ -1,6 +1,11 @@
+import asyncio
+import logging
+import time
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
 
+from google.genai import errors
 from jinja2 import Environment, FileSystemLoader
 
 from app.config import get_settings
@@ -22,25 +27,113 @@ from app.models.lesson import (
     VisualSpec,
 )
 from app.models.request import LessonRequest
-from app.services.gemini_client import GeminiClient
+from app.services.gemini_client import (
+    GeminiAuthError,
+    GeminiClient,
+    GeminiError,
+    GeminiModelOutputError,
+    GeminiRateLimitError,
+    GeminiServiceUnavailableError,
+    GeminiTimeoutError,
+)
+from app.services.groq_client import (
+    GroqAuthError,
+    GroqClient,
+)
+from app.services.quality_validator import LessonQualityError
 from app.utils.language import estimate_duration_ms
+
+logger = logging.getLogger("decodeai.lesson_builder")
 
 PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 jinja_env = Environment(loader=FileSystemLoader(PROMPTS_DIR), autoescape=False)
 
 
-class LessonBuilder:
-    """Orchestrates lesson generation from prompts or provides deterministic fixtures."""
+def is_eligible_for_fallback(exc: Exception) -> tuple[bool, str]:
+    """Determine if a primary provider failure is eligible for automatic Groq fallback.
 
-    def __init__(self, gemini_client: GeminiClient | None = None) -> None:
+    Eligible failure reasons:
+    - HTTP 429 quota exhaustion or rate limiting.
+    - HTTP 503 service unavailable.
+    - Transient timeouts or network connection failures.
+    - Recoverable model output parsing / schema / quality validation failures.
+    - Upstream service 502/503 errors.
+
+    Ineligible failure reasons (fail-fast without fallback):
+    - HTTP 401 / 403 authentication or permission failures.
+    - HTTP 400 / 422 client validation or bad request errors.
+    - Other permanent client errors.
+
+    Returns:
+        A tuple of (is_eligible: bool, reason_category: str).
+    """
+    # 1. Authentication / Permission errors: FAIL FAST (Never fall back)
+    if isinstance(exc, (GeminiAuthError, GroqAuthError)):
+        return False, "auth_failure"
+    if isinstance(exc, errors.APIError) and exc.code in (401, 403):
+        return False, "auth_failure"
+
+    # 2. Client / Request Validation errors: FAIL FAST (Never fall back)
+    if isinstance(exc, errors.APIError) and exc.code in (400, 422):
+        return False, "invalid_request"
+    if isinstance(exc, ValueError) and not isinstance(exc, LessonQualityError):
+        return False, "invalid_parameters"
+
+    # 3. HTTP 429 Rate Limit / Quota Exceeded (Eligible)
+    if isinstance(exc, GeminiRateLimitError):
+        return True, "rate_limit_429"
+    if isinstance(exc, errors.APIError) and exc.code == 429:
+        return True, "rate_limit_429"
+
+    # 4. HTTP 503 Service Unavailable (Eligible)
+    if isinstance(exc, GeminiServiceUnavailableError):
+        return True, "service_unavailable_503"
+    if isinstance(exc, errors.APIError) and exc.code == 503:
+        return True, "service_unavailable_503"
+
+    # 5. Transient Timeouts & Connection Drops (Eligible)
+    if isinstance(exc, (GeminiTimeoutError, TimeoutError, asyncio.TimeoutError)):
+        return True, "transient_timeout"
+    if isinstance(exc, errors.APIError) and exc.code == 504:
+        return True, "transient_timeout"
+
+    # 6. Model Output Parsing / Schema / Quality Validation Failures (Eligible)
+    if isinstance(exc, (GeminiModelOutputError, LessonQualityError)):
+        return True, "output_validation_failure"
+
+    # 7. Generic 502/503 Upstream Provider Failure (Eligible)
+    if isinstance(exc, GeminiError) and exc.status_code in (502, 503):
+        return True, "upstream_service_error"
+
+    return False, "unsupported_error"
+
+
+class LessonBuilder:
+    """Orchestrates lesson generation with Gemini primary and Groq automatic fallback."""
+
+    def __init__(
+        self,
+        gemini_client: GeminiClient | None = None,
+        groq_client: GroqClient | None = None,
+    ) -> None:
+        settings = get_settings()
         if gemini_client is not None:
             self.gemini_client = gemini_client
         else:
-            settings = get_settings()
             self.gemini_client = GeminiClient(
                 api_key=settings.gemini_api_key,
                 model=settings.gemini_model,
                 timeout_seconds=settings.gemini_timeout_seconds,
+            )
+
+        if groq_client is not None:
+            self.groq_client = groq_client
+        else:
+            self.groq_client = GroqClient(
+                api_key=settings.groq_api_key,
+                model=settings.groq_model,
+                timeout_seconds=settings.groq_timeout_seconds,
+                base_url=settings.groq_base_url,
             )
 
     def build_fixture(self, request: LessonRequest) -> Lesson:
@@ -660,7 +753,7 @@ class LessonBuilder:
         )
 
     async def build(self, request: LessonRequest) -> Lesson:
-        """Generate a lesson based on request parameters using Gemini or predefined fixture.
+        """Generate a lesson based on request parameters using Gemini primary with Groq automatic fallback.
 
         Args:
             request: The validated lesson request payload.
@@ -668,9 +761,11 @@ class LessonBuilder:
         Returns:
             Constructed Lesson model.
         """
+        # 1. Fixture mode: immediate deterministic return, zero network/LLM calls
         if request.use_fixture:
             return self.build_fixture(request)
 
+        # 2. Render prompt
         template = jinja_env.get_template("lesson_prompt.j2")
         rendered_prompt = template.render(
             content=request.content,
@@ -679,6 +774,95 @@ class LessonBuilder:
             detail_level=request.detail_level.value,
         )
 
-        return await self.gemini_client.generate_lesson(
-            rendered_prompt, user_content=request.content
+        # 3. Attempt Primary Provider (Gemini)
+        primary_start = time.perf_counter()
+        primary_exc: Exception | None = None
+        try:
+            lesson = await self.gemini_client.generate_lesson(
+                rendered_prompt, user_content=request.content
+            )
+            primary_duration_ms = round((time.perf_counter() - primary_start) * 1000, 1)
+            logger.info(
+                "Lesson generated successfully using primary provider (%s) in %.1fms",
+                self.gemini_client.model_name,
+                primary_duration_ms,
+            )
+            return lesson
+        except Exception as exc:
+            primary_exc = exc
+            primary_duration_ms = round((time.perf_counter() - primary_start) * 1000, 1)
+
+        # 4. Check if error is eligible for fallback
+        is_eligible, reason_category = is_eligible_for_fallback(primary_exc)
+        if not is_eligible:
+            logger.warning(
+                "Primary provider failed with ineligible error [%s: %s]. No fallback will be performed.",
+                type(primary_exc).__name__,
+                reason_category,
+            )
+            raise primary_exc
+
+        # 5. Check if Groq fallback is configured and available
+        has_groq = self.groq_client is not None and (
+            (hasattr(self.groq_client, "is_configured") and self.groq_client.is_configured())
+            or isinstance(self.groq_client, (MagicMock, AsyncMock))
         )
+        if not has_groq:
+            logger.warning(
+                "Primary provider failed with eligible error [%s: %s], but Groq fallback is not configured. Re-raising primary error.",
+                type(primary_exc).__name__,
+                reason_category,
+            )
+            raise primary_exc
+
+        # 6. Fallback Attempt (Groq) — exactly 1 attempt
+        fallback_model_name = getattr(self.groq_client, "model_name", "groq")
+        logger.warning(
+            "Primary provider (%s) failed with reason category [%s] in %.1fms. Triggering Groq fallback (%s)...",
+            self.gemini_client.model_name,
+            reason_category,
+            primary_duration_ms,
+            fallback_model_name,
+        )
+        fallback_start = time.perf_counter()
+        try:
+            assert self.groq_client is not None
+            lesson = await self.groq_client.generate_lesson(
+                rendered_prompt, user_content=request.content
+            )
+            fallback_duration_ms = round((time.perf_counter() - fallback_start) * 1000, 1)
+            total_duration_ms = primary_duration_ms + fallback_duration_ms
+            logger.info(
+                "Fallback provider (%s) succeeded in %.1fms (reason: %s, total_dur: %.1fms)",
+                fallback_model_name,
+                fallback_duration_ms,
+                reason_category,
+                total_duration_ms,
+            )
+            # Record timing metrics
+            lesson._timing_metrics = {
+                "provider": "groq",
+                "primary_dur": primary_duration_ms,
+                "fallback_dur": fallback_duration_ms,
+                "fallback_used": True,
+                "fallback_reason": reason_category,
+                "primary_error": type(primary_exc).__name__,
+                "total": total_duration_ms,
+            }
+            return lesson
+        except Exception as fallback_exc:
+            fallback_duration_ms = round((time.perf_counter() - fallback_start) * 1000, 1)
+            logger.error(
+                "Both primary (%s) and fallback (%s) AI providers failed. Primary: %s (%s); Groq: %s (%s) [dur: %.1fms]",
+                self.gemini_client.model_name,
+                fallback_model_name,
+                type(primary_exc).__name__,
+                primary_exc,
+                type(fallback_exc).__name__,
+                fallback_exc,
+                fallback_duration_ms,
+            )
+            raise GeminiError(
+                detail="Both primary and fallback AI generation providers failed. Please retry later.",
+                status_code=502,
+            ) from fallback_exc

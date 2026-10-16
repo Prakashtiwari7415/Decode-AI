@@ -2,6 +2,8 @@
 
 import logging
 import re
+import uuid
+from datetime import UTC, datetime
 
 from app.models.common import (
     GroundingCategory,
@@ -9,7 +11,7 @@ from app.models.common import (
     UncertaintyLevel,
     VerificationImportance,
 )
-from app.models.lesson import Lesson, VerificationItem
+from app.models.lesson import Caption, Lesson, VerificationItem
 
 logger = logging.getLogger("decodeai.quality_validator")
 
@@ -225,3 +227,51 @@ def validate_and_sanitize_lesson_quality(lesson: Lesson, user_content: str | Non
                 item.grounding = GroundingCategory.NEEDS_VERIFICATION
 
     return lesson
+
+
+def enrich_and_validate_lesson(
+    lesson: Lesson,
+    model_version: str,
+    user_content: str | None = None,
+) -> Lesson:
+    """Enrich model output with backend-verified identifiers, timestamps, and duration calculations,
+    then apply deterministic quality, structural, and grounding validation.
+
+    Ensures identical post-processing regardless of whether generation came from
+    primary (Gemini) or fallback (Groq).
+    """
+    # 1. Lesson ID normalization
+    if (
+        not lesson.lesson_id
+        or lesson.lesson_id.startswith("string")
+        or lesson.lesson_id in ("lesson-123", "lesson-id")
+    ):
+        lesson.lesson_id = f"lesson-ai-{uuid.uuid4().hex[:8]}"
+
+    # 2. Metadata
+    lesson.gemini_model_version = model_version
+    lesson.generated_at = datetime.now(UTC).isoformat()
+
+    # 3. Ensure valid captions and calculate total duration
+    total_duration = 0
+    for chapter in lesson.chapters:
+        for scene in chapter.scenes:
+            if not scene.captions:
+                scene.captions = [
+                    Caption(
+                        offset_ms=0,
+                        duration_ms=5000,
+                        text=scene.narration_text.strip() or scene.title,
+                    )
+                ]
+            scene_duration = max(
+                sum(c.duration_ms for c in scene.captions),
+                max(c.offset_ms + c.duration_ms for c in scene.captions),
+                4000,
+            )
+            total_duration += scene_duration
+
+    lesson.total_estimated_duration_ms = total_duration
+
+    # 4. Deterministic quality and evidence grounding validation
+    return validate_and_sanitize_lesson_quality(lesson, user_content=user_content)

@@ -229,4 +229,4 @@ class Lesson(BaseModel):
     )
     generated_at: str = Field(..., description="ISO 8601 UTC timestamp of creation")
 
-    _timing_metrics: dict[str, float] = PrivateAttr(default_factory=dict)
+    _timing_metrics: dict[str, Any] = PrivateAttr(default_factory=dict)

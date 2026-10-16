@@ -17,6 +17,12 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-3.8-flash"
     gemini_timeout_seconds: float = 30.0
 
+    # Groq Fallback Settings
+    groq_api_key: str = ""
+    groq_model: str = "openai/gpt-oss-120b"
+    groq_timeout_seconds: float = 25.0
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

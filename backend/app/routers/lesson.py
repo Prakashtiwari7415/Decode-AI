@@ -12,6 +12,7 @@ from app.services.gemini_client import (
     GeminiModelOutputError,
     GeminiRateLimitError,
 )
+from app.services.groq_client import GroqError
 from app.services.lesson_builder import LessonBuilder
 from app.services.quality_validator import LessonQualityError
 from app.utils.sanitizer import sanitize_content
@@ -97,13 +98,21 @@ async def generate_lesson(
         # Performance Instrumentation: attach Server-Timing header
         total_dur_ms = round((time.perf_counter() - total_start) * 1000, 1)
         timings = getattr(lesson, "_timing_metrics", None) or {}
-        gemini_dur = timings.get("gemini", total_dur_ms)
-        parse_dur = timings.get("parse", 0.0)
-        quality_dur = timings.get("quality", 0.0)
+        provider = timings.get("provider", "gemini")
 
-        response.headers["Server-Timing"] = (
-            f"gemini;dur={gemini_dur}, parse;dur={parse_dur}, quality;dur={quality_dur}, total;dur={total_dur_ms}"
-        )
+        if provider == "groq":
+            primary_dur = timings.get("primary_dur", 0.0)
+            fallback_dur = timings.get("fallback_dur", total_dur_ms)
+            response.headers["Server-Timing"] = (
+                f"gemini;dur={primary_dur}, groq;dur={fallback_dur}, total;dur={total_dur_ms}"
+            )
+        else:
+            gemini_dur = timings.get("gemini", timings.get("primary_dur", total_dur_ms))
+            parse_dur = timings.get("parse", 0.0)
+            quality_dur = timings.get("quality", 0.0)
+            response.headers["Server-Timing"] = (
+                f"gemini;dur={gemini_dur}, parse;dur={parse_dur}, quality;dur={quality_dur}, total;dur={total_dur_ms}"
+            )
         return lesson
     except LessonQualityError as exc:
         return rfc9457_gemini_error_response(request, GeminiModelOutputError(str(exc)))
@@ -111,3 +120,7 @@ async def generate_lesson(
         return rfc9457_value_error_response(request, exc)
     except GeminiError as exc:
         return rfc9457_gemini_error_response(request, exc)
+    except GroqError as exc:
+        return rfc9457_gemini_error_response(
+            request, GeminiError(detail=exc.detail, status_code=exc.status_code)
+        )
