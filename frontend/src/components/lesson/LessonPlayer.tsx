@@ -116,8 +116,8 @@ export const LessonPlayer: React.FC<LessonPlayerProps> = ({ onBackToInput }) => 
               }
             >
               {lesson.lesson_id.includes('fixture')
-                ? '📌 Predefined Fixture'
-                : `✨ ${lesson.gemini_model_version}`}
+                ? '📚 Example Lesson'
+                : '✨ Visual Lesson'}
             </span>
           </div>
         </div>

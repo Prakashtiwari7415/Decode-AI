@@ -59,11 +59,11 @@ export const PlayerViewport: React.FC = () => {
         <div className="flex items-center gap-2 pointer-events-auto shrink-0 flex-wrap justify-end">
           {lesson.lesson_id.includes('fixture') ? (
             <span className="px-2 py-0.5 rounded-full bg-slate-800/90 border border-slate-700 text-slate-300 text-[10px] font-mono font-semibold flex items-center gap-1">
-              <span>📌</span> Fixture Demo
+              <span>📚</span> Example Lesson
             </span>
           ) : (
             <span className="px-2 py-0.5 rounded-full bg-indigo-950/80 border border-indigo-600/50 text-indigo-300 text-[10px] font-mono font-semibold flex items-center gap-1">
-              <span>✨</span> {lesson.gemini_model_version || 'Gemini 3.8 Flash'}
+              <span>✨</span> Visual Lesson
             </span>
           )}
 

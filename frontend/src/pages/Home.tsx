@@ -8,14 +8,92 @@ import {
 } from '../types/lesson';
 import { useLessonStore } from '../stores/lessonStore';
 import { LessonPlayer } from '../components/lesson/LessonPlayer';
+import { ExampleLessonsModal, EXAMPLE_TOPICS } from '../components/lesson/ExampleLessonsModal';
 
-const LOADING_MESSAGES = [
-  'Analyzing code structure, patterns, and architecture...',
-  'Synthesizing chapters and visual scenes with Gemini 3.8 Flash...',
-  'Generating narration script, timed captions, and verification checklist...',
+export type GenerationState =
+  | 'idle'
+  | 'validating'
+  | 'generating'
+  | 'success'
+  | 'recoverable_error'
+  | 'non_recoverable_error';
+
+const PROGRESSIVE_STATUS_MESSAGES = [
+  'Analyzing code structure, patterns, and concepts...',
+  'Designing structured chapters and visual scenes...',
+  'Assembling narration script, captions, and verification checklist...',
 ];
 
 const MAX_CONTENT_LENGTH = 20_000;
+const MIN_CONTENT_LENGTH = 10;
+
+interface ErrorClassification {
+  title: string;
+  badge: string;
+  friendlyMessage: string;
+  isRecoverable: boolean;
+}
+
+function classifyError(status: number | null, rawMessage: string): ErrorClassification {
+  if (status === 429) {
+    return {
+      title: 'Generation Limit Reached',
+      badge: 'Rate Limit (429)',
+      friendlyMessage:
+        'The AI service is experiencing high demand right now or has reached its rate limit. Please try again in a few moments, or explore our pre-built example lessons to see DecodeAI in action.',
+      isRecoverable: true,
+    };
+  }
+
+  if (status === 503) {
+    return {
+      title: 'Service Temporarily Unavailable',
+      badge: 'Service Busy (503)',
+      friendlyMessage:
+        'The AI generation service is temporarily busy or undergoing maintenance. Your input has been saved. Please try again shortly or check out an example lesson.',
+      isRecoverable: true,
+    };
+  }
+
+  if (status === 504) {
+    return {
+      title: 'Generation Timed Out',
+      badge: 'Timeout (504)',
+      friendlyMessage:
+        'The request took longer than expected to synthesize. Your snippet has been preserved. You can try again or check out an example lesson.',
+      isRecoverable: true,
+    };
+  }
+
+  if (status === 401 || status === 403) {
+    return {
+      title: 'AI Service Configuration Needed',
+      badge: `Configuration (${status})`,
+      friendlyMessage:
+        'The backend AI service has not been configured with an API key. You can explore all features using our pre-built example lessons, or contact your administrator.',
+      isRecoverable: false,
+    };
+  }
+
+  if (status === 400 || status === 422) {
+    return {
+      title: 'Invalid Input',
+      badge: `Validation (${status})`,
+      friendlyMessage:
+        rawMessage || `Please ensure your input is between ${MIN_CONTENT_LENGTH} and ${MAX_CONTENT_LENGTH.toLocaleString()} characters.`,
+      isRecoverable: false,
+    };
+  }
+
+  return {
+    title: 'Unable to Generate Lesson',
+    badge: `Service Error (${status || 500})`,
+    friendlyMessage:
+      rawMessage ||
+      'An unexpected error occurred while communicating with the service. Your input is safe. Please try again or explore an example lesson.',
+    isRecoverable: true,
+  };
+}
 
 export const Home: React.FC = () => {
   const { lesson, setLesson } = useLessonStore();
@@ -26,19 +104,27 @@ export const Home: React.FC = () => {
   const [contentType, setContentType] = useState<ContentType>('explanation');
   const [language, setLanguage] = useState<Language>('en');
   const [detailLevel, setDetailLevel] = useState<DetailLevel>('standard');
-  const [loading, setLoading] = useState<boolean>(false);
+
+  const [generationState, setGenerationState] = useState<GenerationState>('idle');
   const [loadingStage, setLoadingStage] = useState<number>(0);
-  const [error, setError] = useState<string | null>(null);
-  const [errorStatus, setErrorStatus] = useState<number | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<{
+    status: number | null;
+    classification: ErrorClassification;
+  } | null>(null);
   const [lastPayload, setLastPayload] = useState<LessonRequest | null>(null);
 
-  // Cycle loading messages during active generation
+  const [isExampleModalOpen, setIsExampleModalOpen] = useState<boolean>(false);
+
+  const isGenerating = generationState === 'generating';
+
+  // Cycle progressive loading messages during active generation
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
-    if (loading) {
+    if (isGenerating) {
       setLoadingStage(0);
       interval = setInterval(() => {
-        setLoadingStage((prev) => (prev + 1) % LOADING_MESSAGES.length);
+        setLoadingStage((prev) => (prev + 1) % PROGRESSIVE_STATUS_MESSAGES.length);
       }, 3500);
     } else {
       setLoadingStage(0);
@@ -46,83 +132,94 @@ export const Home: React.FC = () => {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [loading]);
+  }, [isGenerating]);
 
-  const fetchLesson = async (reqPayload: LessonRequest) => {
-    setLoading(true);
-    setError(null);
-    setErrorStatus(null);
+  const executeGeneration = async (reqPayload: LessonRequest) => {
+    setGenerationState('generating');
+    setValidationError(null);
+    setErrorDetails(null);
     setLastPayload(reqPayload);
 
     try {
       const result = await generateLesson(reqPayload);
+      setGenerationState('success');
       setLesson(result);
     } catch (err: unknown) {
+      let status: number | null = null;
+      let rawMessage = '';
+
       if (err instanceof ApiError) {
-        setErrorStatus(err.status);
-        setError(err.detail);
+        status = err.status;
+        rawMessage = err.detail;
       } else if (err instanceof Error) {
-        setError(err.message);
+        rawMessage = err.message;
       } else {
-        setError('An unexpected error occurred while communicating with the server.');
+        rawMessage = 'An unexpected error occurred while communicating with the server.';
       }
-    } finally {
-      setLoading(false);
+
+      const classification = classifyError(status, rawMessage);
+      setErrorDetails({ status, classification });
+      setGenerationState(classification.isRecoverable ? 'recoverable_error' : 'non_recoverable_error');
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (isGenerating) return; // Prevent duplicate submissions
+
+    setGenerationState('validating');
     const trimmed = content.trim();
-    if (!trimmed || trimmed.length < 10) {
-      setError('Content must be at least 10 characters long.');
-      setErrorStatus(422);
+
+    if (!trimmed || trimmed.length < MIN_CONTENT_LENGTH) {
+      const msg = `Content must be at least ${MIN_CONTENT_LENGTH} characters long.`;
+      setValidationError(msg);
+      setGenerationState('idle');
       return;
     }
 
     if (trimmed.length > MAX_CONTENT_LENGTH) {
-      setError(`Content exceeds maximum allowed limit of ${MAX_CONTENT_LENGTH.toLocaleString()} characters.`);
-      setErrorStatus(422);
+      const msg = `Content exceeds maximum allowed limit of ${MAX_CONTENT_LENGTH.toLocaleString()} characters.`;
+      setValidationError(msg);
+      setGenerationState('idle');
       return;
     }
+
+    setValidationError(null);
 
     const payload: LessonRequest = {
       content: trimmed,
       content_type: contentType,
       language,
       detail_level: detailLevel,
-      use_fixture: false, // Live AI generation
+      use_fixture: false, // Live AI generation pipeline
     };
 
-    await fetchLesson(payload);
+    await executeGeneration(payload);
   };
 
-  const [demoTopic, setDemoTopic] = useState<'jwt' | 'python'>('jwt');
-
-  const handleLoadSampleFixture = async (langChoice: Language = 'en', forceTopic?: 'jwt' | 'python') => {
-    const selected = forceTopic || demoTopic;
-    const isJwt = selected === 'jwt' || content.toLowerCase().includes('jwt') || content.toLowerCase().includes('token');
-
-    const sampleContent = isJwt
-      ? 'Explain JSON Web Tokens (JWT), token anatomy (header, payload, signature), and stateless request authentication.'
-      : 'def transform_items(items):\n    return [x * 2 for x in items]';
+  const handleSelectExample = async (topicId: 'jwt' | 'python', langChoice: Language = 'en') => {
+    setIsExampleModalOpen(false);
+    const selectedTopic = EXAMPLE_TOPICS.find((t) => t.id === topicId) || EXAMPLE_TOPICS[0];
 
     const payload: LessonRequest = {
-      content: sampleContent,
-      content_type: 'explanation',
+      content: selectedTopic.sampleSnippet,
+      content_type: topicId === 'jwt' ? 'explanation' : 'code_diff',
       language: langChoice,
       detail_level: 'standard',
-      use_fixture: true, // Offline deterministic fixture
+      use_fixture: true, // Offline deterministic example
     };
+
     setLanguage(langChoice);
-    setContent(sampleContent);
-    await fetchLesson(payload);
+    // Note: Do NOT overwrite user's custom content in the editor on generation failure
+    // Only update content if user deliberately chose an example
+    setContent(selectedTopic.sampleSnippet);
+    await executeGeneration(payload);
   };
 
   const handleRetry = async () => {
     if (lastPayload) {
-      await fetchLesson(lastPayload);
+      await executeGeneration(lastPayload);
     }
   };
 
@@ -134,21 +231,28 @@ export const Home: React.FC = () => {
         {/* Top Navbar */}
         <header className="flex items-center justify-between border-b border-slate-800 pb-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-decodeai-primary to-decodeai-accent flex items-center justify-center font-black text-white text-lg shadow-lg shadow-indigo-500/20">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-decodeai-primary to-decodeai-accent flex items-center justify-center font-black text-white text-lg shadow-lg shadow-indigo-500/20">
               D
             </div>
             <div>
               <h1 className="text-xl font-extrabold tracking-tight bg-gradient-to-r from-decodeai-primary via-indigo-300 to-decodeai-accent bg-clip-text text-transparent">
                 DecodeAI
               </h1>
-              <p className="text-[11px] text-slate-400">Gemini 3.8 Flash • Animated Technical Lessons</p>
+              <p className="text-xs text-slate-400">
+                Understand complex technical concepts through visual lessons
+              </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-xs px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700 text-slate-300 font-mono">
-              Milestone 2B
-            </span>
+            <button
+              type="button"
+              onClick={() => setIsExampleModalOpen(true)}
+              className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700 transition-colors flex items-center gap-1.5"
+            >
+              <span>📚</span>
+              <span>Explore example lessons</span>
+            </button>
           </div>
         </header>
 
@@ -156,85 +260,25 @@ export const Home: React.FC = () => {
         {lesson ? (
           <LessonPlayer onBackToInput={() => setLesson(null as any)} />
         ) : (
-          /* Landing Form & Quick-Start Cards */
-          <div className="max-w-4xl mx-auto space-y-8 pt-4">
+          /* Landing Form & Discovery Flow */
+          <div className="max-w-4xl mx-auto space-y-8 pt-2">
+            {/* Hero Section */}
             <div className="text-center space-y-3">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-decodeai-primary/10 border border-decodeai-primary/30 text-decodeai-accent text-xs font-semibold uppercase tracking-wider">
-                Powered by Gemini 3.8 Flash
-              </div>
               <h2 className="text-3xl sm:text-5xl font-black tracking-tight text-slate-100">
-                Understand AI Code Visually
+                Understand Complex Technical Concepts Visually
               </h2>
               <p className="text-base text-slate-400 max-w-2xl mx-auto leading-relaxed">
-                Paste technical code, diffs, or prompts to generate synchronized YouTube-style animated lessons with captions and narration across English, Hindi, and Hinglish.
+                Paste any code snippet, terminal error, or architectural question. DecodeAI synthesizes structured chapters, animated visual scenes, and synchronized narration across English, Hindi, and Hinglish.
               </p>
             </div>
 
-            {/* Quick-Start Sample Cards */}
-            <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="space-y-1">
-                <h3 className="text-sm font-bold text-slate-200">Predefined Demo Lessons</h3>
-                <div className="flex items-center gap-1.5 pt-0.5">
-                  <span className="text-[11px] text-slate-400">Topic:</span>
-                  <button
-                    type="button"
-                    onClick={() => setDemoTopic('jwt')}
-                    className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors ${
-                      demoTopic === 'jwt'
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    JWT Auth
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDemoTopic('python')}
-                    className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-colors ${
-                      demoTopic === 'python'
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    Python Loops
-                  </button>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => handleLoadSampleFixture('en')}
-                  disabled={loading}
-                  className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition-all flex items-center gap-1.5"
-                >
-                  <span>🇬🇧</span> Watch in English
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleLoadSampleFixture('hi')}
-                  disabled={loading}
-                  className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 text-xs font-semibold border border-slate-700 transition-all flex items-center gap-1.5"
-                >
-                  <span>🇮🇳</span> हिन्दी में देखें
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleLoadSampleFixture('hinglish')}
-                  disabled={loading}
-                  className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 text-xs font-semibold border border-slate-700 transition-all flex items-center gap-1.5"
-                >
-                  <span>🌐</span> Hinglish
-                </button>
-              </div>
-            </div>
-
-            {/* Main Form */}
-            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl backdrop-blur-sm">
+            {/* Main Generation Form (Primary Hero Action) */}
+            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl backdrop-blur-sm space-y-6">
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label htmlFor="content" className="block text-sm font-semibold text-slate-200">
-                      Paste Code, Terminal Error, or AI Prompt to Decode
+                      Paste Code, Terminal Error, or Concept to Decode
                     </label>
                     <span
                       className={`text-xs font-mono ${
@@ -247,16 +291,25 @@ export const Home: React.FC = () => {
                   <textarea
                     id="content"
                     rows={6}
-                    className={`w-full bg-slate-950 border rounded-xl p-3.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 font-mono text-sm resize-y ${
-                      isOverLimit
+                    disabled={isGenerating}
+                    className={`w-full bg-slate-950 border rounded-xl p-3.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 font-mono text-sm resize-y disabled:opacity-60 ${
+                      isOverLimit || validationError
                         ? 'border-rose-500 focus:ring-rose-500'
                         : 'border-slate-700/80 focus:ring-decodeai-primary'
                     }`}
-                    placeholder="# Paste Python, TypeScript, terminal errors, or prompts here..."
+                    placeholder="# Paste Python, TypeScript, terminal errors, or architecture questions here..."
                     value={content}
-                    onChange={(e) => setContent(e.target.value)}
+                    onChange={(e) => {
+                      setContent(e.target.value);
+                      if (validationError) setValidationError(null);
+                    }}
                     required
                   />
+                  {validationError && (
+                    <p className="text-xs text-rose-400 mt-1.5 flex items-center gap-1">
+                      <span>⚠️</span> {validationError}
+                    </p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -266,9 +319,10 @@ export const Home: React.FC = () => {
                     </label>
                     <select
                       id="contentType"
+                      disabled={isGenerating}
                       value={contentType}
                       onChange={(e) => setContentType(e.target.value as ContentType)}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-decodeai-primary"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-decodeai-primary disabled:opacity-60"
                     >
                       <option value="explanation">Technical Explanation</option>
                       <option value="code_diff">Code Diff / Refactor</option>
@@ -284,9 +338,10 @@ export const Home: React.FC = () => {
                     </label>
                     <select
                       id="language"
+                      disabled={isGenerating}
                       value={language}
                       onChange={(e) => setLanguage(e.target.value as Language)}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-decodeai-primary"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-decodeai-primary disabled:opacity-60"
                     >
                       <option value="en">English</option>
                       <option value="hi">हिन्दी (Hindi)</option>
@@ -300,9 +355,10 @@ export const Home: React.FC = () => {
                     </label>
                     <select
                       id="detailLevel"
+                      disabled={isGenerating}
                       value={detailLevel}
                       onChange={(e) => setDetailLevel(e.target.value as DetailLevel)}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-decodeai-primary"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-decodeai-primary disabled:opacity-60"
                     >
                       <option value="brief">Brief Overview (1-2 scenes)</option>
                       <option value="standard">Standard Lesson (2-3 scenes)</option>
@@ -311,9 +367,12 @@ export const Home: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Progress / Loading Feedback Banner */}
-                {loading && (
-                  <div className="p-4 bg-indigo-950/40 border border-indigo-800/60 rounded-xl space-y-3">
+                {/* Progress / Loading Feedback Banner (No fake percentages) */}
+                {isGenerating && (
+                  <div
+                    aria-live="polite"
+                    className="p-4 bg-indigo-950/40 border border-indigo-800/60 rounded-xl space-y-3 animate-fade-in"
+                  >
                     <div className="flex items-center gap-3">
                       <svg className="animate-spin h-5 w-5 text-decodeai-accent shrink-0" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -321,110 +380,175 @@ export const Home: React.FC = () => {
                       </svg>
                       <div>
                         <span className="text-xs font-bold uppercase tracking-wider text-decodeai-accent block">
-                          Synthesizing Lesson via Gemini 3.8 Flash
+                          Synthesizing Interactive Lesson
                         </span>
                         <p className="text-sm text-slate-200 transition-all duration-300">
-                          {LOADING_MESSAGES[loadingStage]}
+                          {PROGRESSIVE_STATUS_MESSAGES[loadingStage]}
                         </p>
                       </div>
                     </div>
 
+                    {/* Indeterminate shimmer pulse line */}
                     <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-decodeai-primary to-decodeai-accent transition-all duration-700 rounded-full"
-                        style={{ width: `${((loadingStage + 1) / LOADING_MESSAGES.length) * 100}%` }}
-                      />
+                      <div className="h-full bg-gradient-to-r from-decodeai-primary to-decodeai-accent rounded-full animate-pulse w-full" />
                     </div>
                   </div>
                 )}
 
-                {/* Error Banner with Retry Controls */}
-                {error && !loading && (
-                  <div role="alert" className="p-4 bg-red-950/60 border border-red-800 rounded-xl space-y-3 text-red-200">
-                    <div className="flex items-start gap-2.5">
-                      <span className="text-lg">⚠️</span>
-                      <div className="space-y-1 flex-1">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold uppercase tracking-wider text-red-400">
-                            {errorStatus === 401
-                              ? 'Gemini API Key Required'
-                              : errorStatus === 429
-                              ? 'Rate Limit Exceeded'
-                              : errorStatus === 504
-                              ? 'Generation Timeout'
-                              : errorStatus === 422
-                              ? 'Validation Error'
-                              : 'AI Generation Error'}
+                {/* Human-Friendly Failure Recovery Panel */}
+                {errorDetails && !isGenerating && (
+                  <div
+                    role="alert"
+                    className="p-5 bg-slate-950/90 border border-red-900/60 rounded-xl space-y-4 text-slate-200 shadow-xl"
+                  >
+                    <div className="flex items-start gap-3">
+                      <span className="text-xl shrink-0 mt-0.5">⚠️</span>
+                      <div className="space-y-1.5 flex-1">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <span className="text-sm font-bold text-red-300">
+                            {errorDetails.classification.title}
                           </span>
-                          {errorStatus && (
-                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-red-900/60 text-red-300">
-                              HTTP {errorStatus}
-                            </span>
-                          )}
+                          <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-red-950 border border-red-800 text-red-300">
+                            {errorDetails.classification.badge}
+                          </span>
                         </div>
-                        <p className="text-sm text-slate-200">{error}</p>
-                        {errorStatus === 401 && (
-                          <p className="text-xs text-slate-400 pt-1">
-                            Tip: To use real AI generation, configure a valid <code className="text-amber-300">GEMINI_API_KEY</code> in <code className="text-slate-300">backend/.env</code>. Or test instantly using the Predefined Demo Lessons above.
-                          </p>
-                        )}
+                        <p className="text-sm text-slate-300 leading-relaxed">
+                          {errorDetails.classification.friendlyMessage}
+                        </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 pt-1 border-t border-red-900/40">
-                      <button
-                        type="button"
-                        onClick={handleRetry}
-                        className="px-3 py-1.5 rounded-lg bg-red-900/60 hover:bg-red-800 text-white text-xs font-semibold transition-colors flex items-center gap-1.5"
-                      >
-                        <span>🔄</span> Retry Request
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleLoadSampleFixture(
-                            language,
-                            content.toLowerCase().includes('jwt') || content.toLowerCase().includes('token')
-                              ? 'jwt'
-                              : 'python'
-                          )
-                        }
-                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors"
-                      >
-                        💡 Load Demo Fixture Instead
-                      </button>
+                    <div className="flex items-center justify-between flex-wrap gap-2 pt-3 border-t border-slate-800/80">
+                      <div className="flex items-center gap-2">
+                        {errorDetails.classification.isRecoverable && (
+                          <button
+                            type="button"
+                            onClick={handleRetry}
+                            className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition-all flex items-center gap-1.5"
+                          >
+                            <span>🔄</span> Try again
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setIsExampleModalOpen(true)}
+                          className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition-colors flex items-center gap-1.5"
+                        >
+                          <span>📚</span> Explore example lessons
+                        </button>
+                      </div>
+
+                      <span className="text-xs text-slate-500">
+                        Your snippet text has been preserved above.
+                      </span>
                     </div>
                   </div>
                 )}
 
-                {/* Submit Action */}
-                <div className="flex items-center justify-between pt-2">
-                  <span className="text-xs text-slate-500">
-                    Generates chapters, interactive visual scenes, narration, and captions.
-                  </span>
+                {/* Primary & Secondary Action Controls */}
+                <div className="flex items-center justify-between flex-wrap gap-4 pt-2">
                   <button
-                    type="submit"
-                    disabled={loading || isOverLimit}
-                    className="inline-flex items-center justify-center px-6 py-3 rounded-xl bg-decodeai-primary hover:bg-indigo-600 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed font-semibold text-sm text-white transition-all shadow-lg shadow-indigo-500/25"
+                    type="button"
+                    onClick={() => setIsExampleModalOpen(true)}
+                    className="text-xs text-indigo-400 hover:text-indigo-300 font-medium transition-colors flex items-center gap-1.5"
                   >
-                    {loading ? (
-                      <span className="inline-flex items-center gap-2">
-                        <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                        </svg>
-                        Synthesizing Lesson...
-                      </span>
-                    ) : (
-                      '✨ Generate with Gemini 3.8 Flash'
-                    )}
+                    <span>💡</span> Explore pre-built example lessons
                   </button>
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="submit"
+                      disabled={isGenerating || isOverLimit}
+                      className="inline-flex items-center justify-center px-6 py-3 rounded-xl bg-decodeai-primary hover:bg-indigo-600 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed font-bold text-sm text-white transition-all shadow-lg shadow-indigo-500/25 hover:scale-[1.01]"
+                    >
+                      {isGenerating ? (
+                        <span className="inline-flex items-center gap-2">
+                          <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                          </svg>
+                          Generating lesson...
+                        </span>
+                      ) : (
+                        'Generate lesson'
+                      )}
+                    </button>
+                  </div>
                 </div>
               </form>
+            </div>
+
+            {/* Discovery Section: Pre-built Example Lessons */}
+            <div className="space-y-4 pt-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-slate-200">
+                    Or explore pre-built example lessons
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Learn immediately without API generation quota or waiting.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsExampleModalOpen(true)}
+                  className="text-xs font-semibold text-decodeai-accent hover:underline flex items-center gap-1"
+                >
+                  View all examples <span>→</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {EXAMPLE_TOPICS.map((topic) => (
+                  <div
+                    key={topic.id}
+                    className="p-5 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 transition-all space-y-3 flex flex-col justify-between"
+                  >
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-400">
+                          {topic.category}
+                        </span>
+                        <span className="text-xs font-mono text-slate-500">
+                          {topic.durationEstimate}
+                        </span>
+                      </div>
+                      <h4 className="text-sm font-bold text-slate-100">
+                        {topic.title}
+                      </h4>
+                      <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+                        {topic.summary}
+                      </p>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                      <span className="text-[11px] text-slate-500">
+                        {topic.chaptersCount} Ch • {topic.scenesCount} Scenes
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectExample(topic.id, language)}
+                        disabled={isGenerating}
+                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-indigo-600 hover:text-white text-slate-200 text-xs font-semibold border border-slate-700 transition-all flex items-center gap-1.5"
+                      >
+                        <span>▶</span> Watch example
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
       </div>
+
+      {/* Accessible Pre-built Lessons Modal */}
+      <ExampleLessonsModal
+        isOpen={isExampleModalOpen}
+        onClose={() => setIsExampleModalOpen(false)}
+        onSelectExample={handleSelectExample}
+        isLoading={isGenerating}
+      />
     </main>
   );
 };
