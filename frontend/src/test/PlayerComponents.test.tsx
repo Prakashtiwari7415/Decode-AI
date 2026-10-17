@@ -234,7 +234,7 @@ describe('Player Components', () => {
     fireEvent.click(notesTab);
     expect(screen.getByText(/List Comprehension/i)).toBeInTheDocument();
     expect(screen.getByText(/A concise declarative syntax/i)).toBeInTheDocument();
-    expect(screen.getByText(/Active Slide Takeaway/i)).toBeInTheDocument();
+    expect(screen.getByText(/Active Scene Takeaway/i)).toBeInTheDocument();
 
     // Switch to Practice Tab
     const practiceTab = screen.getByRole('button', { name: /Practice/i });
