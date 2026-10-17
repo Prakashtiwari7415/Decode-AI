@@ -144,7 +144,7 @@ describe('useSpeechNarration and Web Speech API Integration', () => {
   });
 
   it('never calls any network TTS API when loading or switching scenes', async () => {
-    const fetchSpy = vi.spyOn(global, 'fetch');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
 
     const { result } = renderHook(() => useSpeechNarration());
     expect(result.current.isSupported).toBe(true);

@@ -2,14 +2,14 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { generateLesson, ApiError } from '../services/api';
 
 describe('API Service (api.ts)', () => {
-  const originalFetch = global.fetch;
+  const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   afterEach(() => {
-    global.fetch = originalFetch;
+    globalThis.fetch = originalFetch;
   });
 
   it('successfully calls POST /api/lessons/generate and returns Lesson JSON', async () => {
@@ -26,7 +26,7 @@ describe('API Service (api.ts)', () => {
       generated_at: '2026-10-15T00:00:00Z',
     };
 
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
       json: async () => fakeLesson,
@@ -39,8 +39,8 @@ describe('API Service (api.ts)', () => {
       detail_level: 'standard',
     });
 
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect(global.fetch).toHaveBeenCalledWith(
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
       '/api/lessons/generate',
       expect.objectContaining({
         method: 'POST',
@@ -52,7 +52,7 @@ describe('API Service (api.ts)', () => {
   });
 
   it('parses error detail from API responses in generateLesson and throws ApiError', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 400,
       statusText: 'Bad Request',
@@ -71,7 +71,7 @@ describe('API Service (api.ts)', () => {
   });
 
   it('parses array of validation errors in generateLesson', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 422,
       statusText: 'Unprocessable Entity',
@@ -104,7 +104,7 @@ describe('API Service (api.ts)', () => {
     const headers = new Headers();
     headers.set('Retry-After', '30');
 
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 429,
       statusText: 'Too Many Requests',
