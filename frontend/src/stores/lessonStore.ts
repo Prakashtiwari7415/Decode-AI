@@ -72,6 +72,14 @@ const initialSpeechState = {
   seekTargetMs: null as number | null,
 };
 
+function getSceneCaption(scene?: Scene | null): string {
+  if (!scene) return '';
+  if (scene.captions && scene.captions.length > 0 && scene.captions[0].text) {
+    return scene.captions[0].text;
+  }
+  return scene.narration_text || '';
+}
+
 export const useLessonStore = create<LessonState>((set, get) => ({
   lesson: null,
   activeChapterIndex: 0,
@@ -122,14 +130,15 @@ export const useLessonStore = create<LessonState>((set, get) => ({
   },
 
   setLesson: (lesson: Lesson | null) => {
+    const firstScene = lesson?.chapters[0]?.scenes[0] || null;
     set({
       lesson,
       activeChapterIndex: 0,
       activeSceneIndex: 0,
       isPlaying: false,
       sceneElapsedMs: 0,
-      currentCaptionText: '',
-      activeHighlightTerm: null,
+      currentCaptionText: getSceneCaption(firstScene),
+      activeHighlightTerm: firstScene?.visual?.highlighted_terms[0] || null,
       checkedVerificationIds: {},
       ...initialSpeechState,
     });
@@ -142,17 +151,19 @@ export const useLessonStore = create<LessonState>((set, get) => ({
   togglePlay: () => set((state) => ({ isPlaying: !state.isPlaying })),
 
   restart: () => {
+    const { lesson } = get();
+    const firstScene = lesson?.chapters[0]?.scenes[0] || null;
     set({
       activeChapterIndex: 0,
       activeSceneIndex: 0,
       sceneElapsedMs: 0,
-      currentCaptionText: '',
-      activeHighlightTerm: null,
+      currentCaptionText: getSceneCaption(firstScene),
+      activeHighlightTerm: firstScene?.visual?.highlighted_terms[0] || null,
       activeSegmentIndex: 0,
       seekTargetMs: null,
       activeSceneDurationMs: null,
       isSpeaking: false,
-      isPlaying: true,
+      isPlaying: false,
     });
   },
 
@@ -162,11 +173,12 @@ export const useLessonStore = create<LessonState>((set, get) => ({
 
     const currentChapter = lesson.chapters[activeChapterIndex];
     if (activeSceneIndex + 1 < currentChapter.scenes.length) {
+      const nextSc = currentChapter.scenes[activeSceneIndex + 1];
       set({
         activeSceneIndex: activeSceneIndex + 1,
         sceneElapsedMs: 0,
-        currentCaptionText: '',
-        activeHighlightTerm: null,
+        currentCaptionText: getSceneCaption(nextSc),
+        activeHighlightTerm: nextSc?.visual?.highlighted_terms[0] || null,
         activeSegmentIndex: 0,
         seekTargetMs: null,
         activeSceneDurationMs: null,
@@ -176,12 +188,14 @@ export const useLessonStore = create<LessonState>((set, get) => ({
     }
 
     if (activeChapterIndex + 1 < lesson.chapters.length) {
+      const nextChap = lesson.chapters[activeChapterIndex + 1];
+      const nextSc = nextChap.scenes[0];
       set({
         activeChapterIndex: activeChapterIndex + 1,
         activeSceneIndex: 0,
         sceneElapsedMs: 0,
-        currentCaptionText: '',
-        activeHighlightTerm: null,
+        currentCaptionText: getSceneCaption(nextSc),
+        activeHighlightTerm: nextSc?.visual?.highlighted_terms[0] || null,
         activeSegmentIndex: 0,
         seekTargetMs: null,
         activeSceneDurationMs: null,
@@ -200,11 +214,12 @@ export const useLessonStore = create<LessonState>((set, get) => ({
     if (!lesson) return false;
 
     if (activeSceneIndex > 0) {
+      const prevSc = lesson.chapters[activeChapterIndex].scenes[activeSceneIndex - 1];
       set({
         activeSceneIndex: activeSceneIndex - 1,
         sceneElapsedMs: 0,
-        currentCaptionText: '',
-        activeHighlightTerm: null,
+        currentCaptionText: getSceneCaption(prevSc),
+        activeHighlightTerm: prevSc?.visual?.highlighted_terms[0] || null,
         activeSegmentIndex: 0,
         seekTargetMs: null,
         activeSceneDurationMs: null,
@@ -215,12 +230,13 @@ export const useLessonStore = create<LessonState>((set, get) => ({
 
     if (activeChapterIndex > 0) {
       const prevChapter = lesson.chapters[activeChapterIndex - 1];
+      const prevSc = prevChapter.scenes[prevChapter.scenes.length - 1];
       set({
         activeChapterIndex: activeChapterIndex - 1,
         activeSceneIndex: prevChapter.scenes.length - 1,
         sceneElapsedMs: 0,
-        currentCaptionText: '',
-        activeHighlightTerm: null,
+        currentCaptionText: getSceneCaption(prevSc),
+        activeHighlightTerm: prevSc?.visual?.highlighted_terms[0] || null,
         activeSegmentIndex: 0,
         seekTargetMs: null,
         activeSceneDurationMs: null,
@@ -235,12 +251,13 @@ export const useLessonStore = create<LessonState>((set, get) => ({
   selectChapter: (index: number) => {
     const { lesson } = get();
     if (!lesson || index < 0 || index >= lesson.chapters.length) return;
+    const destScene = lesson.chapters[index]?.scenes[0] || null;
     set({
       activeChapterIndex: index,
       activeSceneIndex: 0,
       sceneElapsedMs: 0,
-      currentCaptionText: '',
-      activeHighlightTerm: null,
+      currentCaptionText: getSceneCaption(destScene),
+      activeHighlightTerm: destScene?.visual?.highlighted_terms[0] || null,
       activeSegmentIndex: 0,
       seekTargetMs: null,
       activeSceneDurationMs: null,
@@ -253,13 +270,14 @@ export const useLessonStore = create<LessonState>((set, get) => ({
     if (!lesson || chapterIndex < 0 || chapterIndex >= lesson.chapters.length) return;
     const chapter = lesson.chapters[chapterIndex];
     if (sceneIndex < 0 || sceneIndex >= chapter.scenes.length) return;
+    const destScene = chapter.scenes[sceneIndex] || null;
 
     set({
       activeChapterIndex: chapterIndex,
       activeSceneIndex: sceneIndex,
       sceneElapsedMs: 0,
-      currentCaptionText: '',
-      activeHighlightTerm: null,
+      currentCaptionText: getSceneCaption(destScene),
+      activeHighlightTerm: destScene?.visual?.highlighted_terms[0] || null,
       activeSegmentIndex: 0,
       seekTargetMs: null,
       activeSceneDurationMs: null,

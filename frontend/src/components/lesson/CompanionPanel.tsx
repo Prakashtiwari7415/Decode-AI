@@ -140,7 +140,7 @@ export const CompanionPanel: React.FC = () => {
             {/* Overall Progress Summary */}
             <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 flex items-center justify-between text-xs">
               <span className="text-slate-400">
-                Scene <strong className="text-slate-200">{currentSceneNumber}</strong> of {totalScenes}
+                Slide <strong className="text-slate-200">{currentSceneNumber}</strong> of {totalScenes}
               </span>
               <div className="flex items-center gap-2">
                 <div className="w-20 h-1.5 bg-slate-800 rounded-full overflow-hidden">
@@ -160,7 +160,7 @@ export const CompanionPanel: React.FC = () => {
                     Chapter {cIdx + 1}: {chapter.title}
                   </h4>
                   <span className="text-[10px] text-slate-500 font-mono shrink-0">
-                    {chapter.scenes.length} {chapter.scenes.length === 1 ? 'scene' : 'scenes'}
+                    {chapter.scenes.length} {chapter.scenes.length === 1 ? 'slide' : 'slides'}
                   </span>
                 </div>
 
@@ -210,7 +210,7 @@ export const CompanionPanel: React.FC = () => {
             {currentScene && (
               <div className="p-3.5 rounded-xl border border-indigo-500/20 bg-indigo-950/20 space-y-1.5">
                 <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-indigo-400 block">
-                  Active Scene Takeaway
+                  Active Slide Takeaway
                 </span>
                 <h4 className="text-xs font-bold text-slate-200">{currentScene.title}</h4>
                 <p className="text-xs text-slate-300 leading-relaxed font-sans">

@@ -21,7 +21,6 @@ export function useLessonTimeline(): UseLessonTimelineResult {
     activeChapterIndex,
     activeSceneIndex,
     isPlaying,
-    playbackSpeed,
     activeSceneDurationMs,
     seekTargetMs,
     captionsEnabled,
@@ -32,7 +31,6 @@ export function useLessonTimeline(): UseLessonTimelineResult {
     setActiveSegmentIndex,
     seekSceneMs,
     clearSeekTarget,
-    nextScene,
   } = useLessonStore();
 
   const speech = useSpeechNarration();
@@ -133,77 +131,14 @@ export function useLessonTimeline(): UseLessonTimelineResult {
     setActiveHighlightTerm,
   ]);
 
-  // High-precision timeline clock driving coordinated animation and caption rendering
+  // In slideshow presentation mode, continuous video autoplay is disabled.
+  // Scene transitions are strictly user-controlled via slide navigation.
   useEffect(() => {
-    if (!isPlaying || !lesson) {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
-      return;
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
     }
-
-    if (!scene) return;
-
-    lastClockTimeRef.current = performance.now();
-
-    const tick = () => {
-      const now = performance.now();
-      const delta = (now - lastClockTimeRef.current) * playbackSpeed;
-      lastClockTimeRef.current = now;
-
-      const effectiveElapsed = Math.min(sceneElapsedMsRef.current + delta, durationMs);
-      sceneElapsedMsRef.current = effectiveElapsed;
-      setSceneElapsedMs(effectiveElapsed);
-
-      // Coordinate active caption and visual highlighted term
-      const matchedSegment = findActiveSegment(segments, effectiveElapsed);
-      if (matchedSegment) {
-        if (captionsEnabled) {
-          setCurrentCaptionText(matchedSegment.text);
-        }
-        setActiveSegmentIndex(matchedSegment.index);
-        setActiveHighlightTerm(matchedSegment.highlightedTerms[0] || null);
-      }
-
-      // Handle scene completion
-      const isComplete = effectiveElapsed >= durationMs;
-
-      if (isComplete && !sceneFinishedRef.current) {
-        sceneFinishedRef.current = true;
-        speech.stopSpeech();
-        nextScene();
-        return;
-      }
-
-      animationFrameRef.current = requestAnimationFrame(tick);
-    };
-
-    animationFrameRef.current = requestAnimationFrame(tick);
-
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
-    };
-  }, [
-    isPlaying,
-    activeChapterIndex,
-    activeSceneIndex,
-    playbackSpeed,
-    durationMs,
-    lesson,
-    captionsEnabled,
-    scene,
-    segments,
-    setSceneElapsedMs,
-    setCurrentCaptionText,
-    setActiveSegmentIndex,
-    setActiveHighlightTerm,
-    nextScene,
-    speech,
-  ]);
+  }, [isPlaying]);
 
   return {
     audio: speech,

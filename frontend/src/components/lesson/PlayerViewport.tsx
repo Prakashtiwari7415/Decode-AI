@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useLessonStore } from '../../stores/lessonStore';
 import { SceneRenderer } from '../scenes/SceneRenderer';
 import { CaptionOverlay } from './CaptionOverlay';
@@ -7,56 +7,51 @@ export const PlayerViewport: React.FC = () => {
   const {
     lesson,
     activeChapterIndex,
-    activeSceneIndex,
-    isPlaying,
     isSpeaking,
+    captionsEnabled,
     getCurrentScene,
-    togglePlay,
+    getTotalScenes,
+    getGlobalSceneIndex,
   } = useLessonStore();
-
-  const [showPlayIconNotice, setShowPlayIconNotice] = useState<boolean>(false);
 
   const scene = getCurrentScene();
   const currentChapter = lesson?.chapters[activeChapterIndex];
+  const totalScenes = getTotalScenes();
+  const currentGlobalIndex = getGlobalSceneIndex();
 
   if (!lesson || !scene || !currentChapter) {
     return (
       <div className="w-full aspect-video min-h-[380px] rounded-t-xl bg-slate-950 flex items-center justify-center border border-slate-800 text-slate-500 text-sm">
-        No active lesson scene loaded.
+        No active slide loaded.
       </div>
     );
   }
 
-  const handleViewportClick = (e: React.MouseEvent) => {
-    // Avoid toggling play if clicking inside interactive buttons or controls
-    const target = e.target as HTMLElement;
-    if (target.closest('button') || target.closest('select') || target.closest('input')) {
-      return;
-    }
-    togglePlay();
-    setShowPlayIconNotice(true);
-    setTimeout(() => setShowPlayIconNotice(false), 500);
-  };
-
   return (
-    <div
-      onClick={handleViewportClick}
-      className="relative w-full aspect-video min-h-[380px] max-h-[640px] rounded-t-xl bg-slate-950 border border-slate-800 shadow-2xl overflow-hidden flex flex-col justify-between cursor-pointer group select-none"
-    >
-      {/* Top Header Overlay */}
-      <div className="relative z-20 px-4 py-2.5 bg-gradient-to-b from-slate-950/95 via-slate-950/70 to-transparent flex items-center justify-between gap-2 pointer-events-none">
-        {/* Chapter & Scene Indicator */}
+    <div className="relative w-full aspect-video min-h-[380px] max-h-[640px] rounded-t-xl bg-slate-950 border border-slate-800 shadow-2xl overflow-hidden flex flex-col justify-between select-none">
+      {/* Top Slide Header Overlay */}
+      <div className="relative z-20 px-4 py-3 bg-gradient-to-b from-slate-950 via-slate-950/80 to-transparent flex items-center justify-between gap-3 border-b border-slate-800/40">
+        {/* Chapter & Slide Indicator */}
         <div className="flex items-center gap-2 text-xs truncate">
-          <span className="px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 font-semibold text-[11px]">
+          <span className="px-2.5 py-1 rounded-md bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 font-semibold text-[11px] shrink-0">
             Ch {activeChapterIndex + 1}/{lesson.chapters.length}: {currentChapter.title}
           </span>
           <span className="text-slate-300 font-medium truncate text-xs">
-            Scene {activeSceneIndex + 1}: {scene.title}
+            Slide {currentGlobalIndex + 1}: {scene.title}
           </span>
         </div>
 
-        {/* Status Indicators */}
-        <div className="flex items-center gap-2 pointer-events-auto shrink-0 flex-wrap justify-end">
+        {/* Status Indicators & Slide Counter */}
+        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+          {/* Slide Counter Badge */}
+          <span
+            className="px-2.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-200 text-[11px] font-mono font-semibold"
+            title={`Slide ${currentGlobalIndex + 1} of ${totalScenes}`}
+          >
+            Slide {currentGlobalIndex + 1} of {totalScenes}
+          </span>
+
+          {/* Lesson Type Badge */}
           {lesson.lesson_id.includes('fixture') ? (
             <span className="px-2 py-0.5 rounded-full bg-slate-800/90 border border-slate-700 text-slate-300 text-[10px] font-mono font-semibold flex items-center gap-1">
               <span>📚</span> Example Lesson
@@ -67,7 +62,7 @@ export const PlayerViewport: React.FC = () => {
             </span>
           )}
 
-          {/* Grounding Level */}
+          {/* Evidence Grounding Level */}
           {scene.grounding_category && (
             <span
               className={`px-2 py-0.5 rounded-full text-[10px] font-semibold flex items-center gap-1 ${
@@ -79,7 +74,9 @@ export const PlayerViewport: React.FC = () => {
               }`}
               title={`Evidence grounding: ${scene.grounding_category}`}
             >
-              <span>{scene.grounding_category === 'observed' ? '🔍' : scene.grounding_category === 'inferred' ? '💡' : '⚠️'}</span>
+              <span>
+                {scene.grounding_category === 'observed' ? '🔍' : scene.grounding_category === 'inferred' ? '💡' : '⚠️'}
+              </span>
               <span className="capitalize hidden sm:inline">
                 {scene.grounding_category === 'needs_verification'
                   ? 'Verify'
@@ -92,56 +89,26 @@ export const PlayerViewport: React.FC = () => {
           {isSpeaking ? (
             <span
               className="px-2 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-500/50 text-cyan-300 text-[10px] font-mono flex items-center gap-1.5 animate-pulse"
-              title="Browser speech synthesis is actively narrating this scene"
+              title="Browser speech synthesis is actively reading this slide"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-              <span>🗣️ Browser Speech</span>
+              <span>🗣️ Voice Active</span>
             </span>
-          ) : (
+          ) : captionsEnabled ? (
             <span
               className="px-2 py-0.5 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 text-[10px] font-medium flex items-center gap-1"
-              title="Subtitles synchronized with estimated narration pace"
+              title="Subtitles active"
             >
-              <span>💬</span> Captions (Est.)
+              <span>💬</span> Subtitles ON
             </span>
-          )}
-
-          {/* Unambiguous Playback Status Indicator */}
-          {isPlaying ? (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold flex items-center gap-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              PLAYING
-            </span>
-          ) : (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold flex items-center gap-1.5 bg-slate-800/80 text-slate-400 border border-slate-700/60">
-              <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
-              PAUSED
-            </span>
-          )}
+          ) : null}
         </div>
       </div>
 
-      {/* Center Scene Rendering Canvas */}
-      <div className="relative z-10 flex-1 w-full h-full p-2 sm:p-4 overflow-hidden flex items-center justify-center">
+      {/* Center Slide Visual Content Canvas */}
+      <div className="relative z-10 flex-1 w-full h-full p-3 sm:p-5 overflow-hidden flex items-center justify-center">
         <SceneRenderer scene={scene} />
       </div>
-
-      {/* Floating Center Play/Pause Flash Animation */}
-      {showPlayIconNotice && (
-        <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none bg-slate-950/20 backdrop-blur-[1px] transition-all">
-          <div className="p-3.5 rounded-full bg-slate-900/90 border border-slate-700 text-white shadow-2xl scale-110">
-            {isPlaying ? (
-              <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M8 5v14l11-7z" />
-              </svg>
-            ) : (
-              <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-              </svg>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Bottom Subtitle Caption Strip */}
       <CaptionOverlay />

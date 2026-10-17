@@ -3,6 +3,8 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { useLessonStore } from '../stores/lessonStore';
 import { PlayerViewport } from '../components/lesson/PlayerViewport';
 import { PlayerControls } from '../components/lesson/PlayerControls';
+import { ProgressBar } from '../components/lesson/ProgressBar';
+import { LessonPlayer } from '../components/lesson/LessonPlayer';
 import { ArchitectureScene } from '../components/scenes/ArchitectureScene';
 import { CodeDiffScene } from '../components/scenes/CodeDiffScene';
 import { TextConceptScene } from '../components/scenes/TextConceptScene';
@@ -93,12 +95,12 @@ describe('Player Components', () => {
     useLessonStore.getState().setLesson(mockLesson);
   });
 
-  it('renders PlayerViewport with chapter title, scene badges, and lesson badge', () => {
+  it('renders PlayerViewport with chapter title, slide badges, and lesson badge', () => {
     render(<PlayerViewport />);
 
     expect(screen.getByText(/Fundamentals & Syntax/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Loop to Comprehension/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/PAUSED/i)).toBeInTheDocument();
+    expect(screen.getByText(/Slide 1 of 2/i)).toBeInTheDocument();
     expect(screen.getByText(/Visual Lesson/i)).toBeInTheDocument();
   });
 
@@ -111,20 +113,39 @@ describe('Player Components', () => {
     expect(screen.getByText(/Example Lesson/i)).toBeInTheDocument();
   });
 
-  it('renders PlayerControls with accessible buttons and allows play/pause toggle', () => {
+  it('renders PlayerControls with accessible slide navigation buttons and handles boundary states', () => {
     render(<PlayerControls />);
 
-    const playBtn = screen.getByRole('button', { name: 'Play' });
-    expect(playBtn).toBeInTheDocument();
+    // Previous slide button is disabled on first slide
+    const prevBtn = screen.getByRole('button', { name: 'Previous Slide' });
+    expect(prevBtn).toBeInTheDocument();
+    expect(prevBtn).toBeDisabled();
 
-    fireEvent.click(playBtn);
-    expect(useLessonStore.getState().isPlaying).toBe(true);
+    // Next slide button is enabled
+    const nextBtn = screen.getByRole('button', { name: 'Next Slide' });
+    expect(nextBtn).toBeInTheDocument();
+    expect(nextBtn).toBeEnabled();
+
+    // Navigate to slide 2
+    fireEvent.click(nextBtn);
+    expect(useLessonStore.getState().activeChapterIndex).toBe(1);
+    expect(useLessonStore.getState().activeSceneIndex).toBe(0);
+
+    // On last slide, Next is disabled and Previous is enabled
+    expect(screen.getByRole('button', { name: 'Next Slide' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Previous Slide' })).toBeEnabled();
+
+    // Restart button returns to slide 1
+    const restartBtn = screen.getByRole('button', { name: 'Restart Lesson' });
+    fireEvent.click(restartBtn);
+    expect(useLessonStore.getState().activeChapterIndex).toBe(0);
+    expect(useLessonStore.getState().activeSceneIndex).toBe(0);
   });
 
   it('renders Speak control and allows toggling speech narration in PlayerControls', () => {
     render(<PlayerControls />);
 
-    const speakBtn = screen.getByRole('button', { name: /Speak Scene|Stop Speech/i });
+    const speakBtn = screen.getByRole('button', { name: /Read Slide|Stop Speech/i });
     expect(speakBtn).toBeInTheDocument();
 
     const autoVoiceBtn = screen.getByRole('button', { name: 'Toggle Auto Speech Narration' });
@@ -135,24 +156,31 @@ describe('Player Components', () => {
     expect(useLessonStore.getState().narrationEnabled).toBe(true);
   });
 
-  it('renders duration indicator with estimated timing label in PlayerControls', () => {
+  it('renders slide counter and jump selector in PlayerControls', () => {
     render(<PlayerControls />);
 
-    expect(screen.getByText('(est.)')).toBeInTheDocument();
-    expect(screen.getByText('00:00')).toBeInTheDocument();
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+
+    const jumpSelect = screen.getByRole('combobox', { name: 'Jump directly to slide' });
+    expect(jumpSelect).toBeInTheDocument();
+
+    fireEvent.change(jumpSelect, { target: { value: '1-0' } });
+    expect(useLessonStore.getState().activeChapterIndex).toBe(1);
+    expect(useLessonStore.getState().activeSceneIndex).toBe(0);
   });
 
   it('renders narration mode pill in PlayerViewport reflecting speech vs caption mode', () => {
-    // Default: Captions (Est.)
+    // Default: Subtitles ON
     const { rerender } = render(<PlayerViewport />);
-    expect(screen.getByText(/Captions \(Est\.\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Subtitles ON/i)).toBeInTheDocument();
 
     // When browser speech is actively speaking
     act(() => {
       useLessonStore.getState().setIsSpeaking(true);
     });
     rerender(<PlayerViewport />);
-    expect(screen.getByText(/Browser Speech/i)).toBeInTheDocument();
+    expect(screen.getByText(/Voice Active/i)).toBeInTheDocument();
 
     // Clean up
     act(() => {
@@ -160,25 +188,17 @@ describe('Player Components', () => {
     });
   });
 
-  it('renders unambiguous playback status badge reflecting accurate player state in PlayerViewport', () => {
-    // 1. Initial paused state
+  it('renders slide progress badge and grounding indicators in PlayerViewport', () => {
     const { rerender } = render(<PlayerViewport />);
-    expect(screen.getByText('PAUSED')).toBeInTheDocument();
+    expect(screen.getByTitle('Slide 1 of 2')).toBeInTheDocument();
+    expect(screen.getByText(/observed/i)).toBeInTheDocument();
 
-    // 2. Playing state
     act(() => {
-      useLessonStore.getState().play();
+      useLessonStore.getState().nextScene();
     });
     rerender(<PlayerViewport />);
-    expect(screen.getByText('PLAYING')).toBeInTheDocument();
-
-    // 3. Paused state - never shows PLAYING when paused
-    act(() => {
-      useLessonStore.getState().pause();
-    });
-    rerender(<PlayerViewport />);
-    expect(screen.getByText('PAUSED')).toBeInTheDocument();
-    expect(screen.queryByText('PLAYING')).not.toBeInTheDocument();
+    expect(screen.getByTitle('Slide 2 of 2')).toBeInTheDocument();
+    expect(screen.getByText(/inferred/i)).toBeInTheDocument();
   });
 
   it('renders ArchitectureScene with all system pipeline nodes and labels', () => {
@@ -207,13 +227,14 @@ describe('Player Components', () => {
     // Chapters tab is active by default
     expect(screen.getByText(/Fundamentals & Syntax/i)).toBeInTheDocument();
     expect(screen.getByText(/Architecture & Runtime/i)).toBeInTheDocument();
+    expect(screen.getByText(/Loop to Comprehension/i)).toBeInTheDocument();
 
     // Switch to Notes Tab
     const notesTab = screen.getByRole('button', { name: /Notes/i });
     fireEvent.click(notesTab);
     expect(screen.getByText(/List Comprehension/i)).toBeInTheDocument();
     expect(screen.getByText(/A concise declarative syntax/i)).toBeInTheDocument();
-    expect(screen.getByText(/Active Scene Takeaway/i)).toBeInTheDocument();
+    expect(screen.getByText(/Active Slide Takeaway/i)).toBeInTheDocument();
 
     // Switch to Practice Tab
     const practiceTab = screen.getByRole('button', { name: /Practice/i });
@@ -233,40 +254,48 @@ describe('Player Components', () => {
     expect(screen.getByText(/DecodeAI never executes pasted code/i)).toBeInTheDocument();
   });
 
-  it('triggers intra-scene seeking via rewind and forward buttons in PlayerControls', () => {
-    act(() => {
-      useLessonStore.getState().setActiveSceneDurationMs(10000);
-      useLessonStore.getState().seekSceneMs(6000);
-      useLessonStore.getState().clearSeekTarget();
-    });
+  it('navigates slides via segmented ProgressBar step buttons', () => {
+    render(<ProgressBar />);
 
-    render(<PlayerControls />);
+    const stepButtons = screen.getAllByRole('button');
+    expect(stepButtons).toHaveLength(2);
 
-    // Check time display renders MM:SS / MM:SS
-    expect(screen.getByText('00:06')).toBeInTheDocument();
-    expect(screen.getByText('00:10')).toBeInTheDocument();
+    // Click step 2
+    fireEvent.click(stepButtons[1]);
+    expect(useLessonStore.getState().activeChapterIndex).toBe(1);
+    expect(useLessonStore.getState().activeSceneIndex).toBe(0);
 
-    // Click rewind 5s -> should seek to 1000ms
-    const rewindBtn = screen.getByRole('button', { name: 'Rewind 5 seconds' });
-    act(() => {
-      fireEvent.click(rewindBtn);
-    });
-    expect(useLessonStore.getState().seekTargetMs).toBe(1000);
-    expect(useLessonStore.getState().sceneElapsedMs).toBe(1000);
+    // Click step 1
+    fireEvent.click(stepButtons[0]);
+    expect(useLessonStore.getState().activeChapterIndex).toBe(0);
+    expect(useLessonStore.getState().activeSceneIndex).toBe(0);
+  });
 
-    // Update to 7000ms
-    act(() => {
-      useLessonStore.getState().clearSeekTarget();
-      useLessonStore.getState().seekSceneMs(7000);
-      useLessonStore.getState().clearSeekTarget();
-    });
+  it('displays completion card on final slide and handles keyboard navigation in LessonPlayer', () => {
+    render(<LessonPlayer />);
 
-    // Click forward 5s -> should clamp to scene duration 10000ms (7000 + 5000 clamped to 10000)
-    const forwardBtn = screen.getByRole('button', { name: 'Forward 5 seconds' });
-    act(() => {
-      fireEvent.click(forwardBtn);
-    });
-    expect(useLessonStore.getState().seekTargetMs).toBe(10000);
+    // First slide does not show completion card
+    expect(screen.queryByText(/Lesson Completed!/i)).not.toBeInTheDocument();
+
+    // Navigate to slide 2 via keyboard Right Arrow
+    fireEvent.keyDown(window, { code: 'ArrowRight' });
+    expect(useLessonStore.getState().activeChapterIndex).toBe(1);
+
+    // On last slide, Lesson Completed card is shown
+    expect(screen.getByText(/Lesson Completed!/i)).toBeInTheDocument();
+    expect(screen.getByText(/Review from Slide 1/i)).toBeInTheDocument();
+
+    // Navigate back via keyboard Left Arrow
+    fireEvent.keyDown(window, { code: 'ArrowLeft' });
+    expect(useLessonStore.getState().activeChapterIndex).toBe(0);
+
+    // Ensure keyboard shortcuts are ignored when typing in an input
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    fireEvent.keyDown(input, { code: 'ArrowRight' });
+    // Should still be on slide 0
+    expect(useLessonStore.getState().activeChapterIndex).toBe(0);
+    document.body.removeChild(input);
   });
 
   it('dynamically highlights architecture pipeline nodes coordinated with activeHighlightTerm', () => {
@@ -391,8 +420,8 @@ describe('Player Components', () => {
     expect(state.activeChapterIndex).toBe(0);
     expect(state.activeSceneIndex).toBe(0);
     expect(state.sceneElapsedMs).toBe(0);
-    expect(state.activeHighlightTerm).toBeNull();
-    expect(state.currentCaptionText).toBe('');
+    expect(state.activeHighlightTerm).toBe('append');
+    expect(state.currentCaptionText).toBe('Three lines condense into one.');
     expect(Object.keys(state.checkedVerificationIds)).toHaveLength(0);
     expect(state.isPlaying).toBe(false);
   });

@@ -221,7 +221,6 @@ export function useSpeechNarration(): UseSpeechNarrationResult {
     stopSpeech();
 
     if (
-      isPlayingRef.current &&
       narrationEnabledRef.current &&
       !isMutedRef.current &&
       isSpeechSynthesisSupported()
