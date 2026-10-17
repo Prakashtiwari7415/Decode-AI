@@ -17,7 +17,8 @@ export class ApiError extends Error {
   }
 }
 
-const BASE_URL: string = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '';
+const rawBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '';
+const BASE_URL: string = rawBaseUrl.trim().replace(/\/+$/, '');
 
 /**
  * Sends a generation request to the backend and returns the synthesized Lesson.

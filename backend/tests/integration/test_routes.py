@@ -56,13 +56,20 @@ MOCK_GENERATED_LESSON = {
 
 
 def test_health_check_returns_ok() -> None:
-    """Verify GET /api/health returns HTTP 200 and status ok."""
-    response = client.get("/api/health")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "ok"
-    assert data["version"] == "0.1.0"
-    assert "environment" in data
+    """Verify GET /api/health, /health, and / return HTTP 200 and status ok."""
+    for path in ("/api/health", "/health"):
+        response = client.get(path)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["version"] == "0.1.0"
+        assert "environment" in data
+
+    root_res = client.get("/")
+    assert root_res.status_code == 200
+    root_data = root_res.json()
+    assert root_data["status"] == "ok"
+    assert "service" in root_data
 
 
 def test_generate_lesson_fixture_returns_complete_lesson() -> None:

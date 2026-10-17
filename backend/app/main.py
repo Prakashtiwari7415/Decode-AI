@@ -43,8 +43,9 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Register API routers under /api prefix
+    # Register API routers under /api prefix and at root for deployment health checks
     app.include_router(health_router, prefix="/api")
+    app.include_router(health_router)
     app.include_router(lesson_router, prefix="/api")
 
     # RFC 9457 Exception Handler for ValueError

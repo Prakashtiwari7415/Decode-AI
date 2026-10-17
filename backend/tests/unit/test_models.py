@@ -71,3 +71,22 @@ def test_lesson_fixture_round_trips_through_json() -> None:
     assert len(restored.chapters[0].scenes) == 2
     assert len(restored.glossary) == 2
     assert len(restored.verification_checklist) == 2
+
+
+def test_settings_allowed_origins_sanitization() -> None:
+    """Verify that Settings sanitizes trailing slashes and handles comma/JSON origin formats."""
+    from app.config import Settings
+
+    # Comma-separated with trailing slashes and whitespace
+    s1 = Settings(
+        gemini_api_key="dev-placeholder-key",
+        allowed_origins="https://decodeai.onrender.com/, http://localhost:5173/ ",
+    )
+    assert s1.allowed_origins == ["https://decodeai.onrender.com", "http://localhost:5173"]
+
+    # JSON array string with trailing slashes
+    s2 = Settings(
+        gemini_api_key="dev-placeholder-key",
+        allowed_origins='["https://decodeai.onrender.com/", "http://127.0.0.1:5173"]',
+    )
+    assert s2.allowed_origins == ["https://decodeai.onrender.com", "http://127.0.0.1:5173"]

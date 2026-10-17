@@ -1,0 +1,2 @@
+# Single Page Application rewrite rule for static hosts (Render, Netlify, Cloudflare Pages)
+/*    /index.html   200

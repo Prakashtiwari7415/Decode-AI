@@ -18,3 +18,15 @@ async def get_health() -> dict[str, Any]:
         "version": "0.1.0",
         "environment": settings.environment,
     }
+
+
+@router.get("/", summary="Root Service Status", include_in_schema=False)
+async def get_root() -> dict[str, Any]:
+    """Root health check endpoint for hosting platforms and load balancers."""
+    settings = get_settings()
+    return {
+        "status": "ok",
+        "service": "DecodeAI Backend",
+        "version": "0.1.0",
+        "environment": settings.environment,
+    }
