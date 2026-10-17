@@ -10,244 +10,18 @@ services:
   # 1. Backend Web Service (FastAPI)
   # ---------------------------------------------------------------------------
   - type: web
-    name: decodeai-Viewed .env.example:1-18
-Created .env.example
-Created render.yaml
-Created ci-cd.yml
-Ran command: Remove redundant legacy workflow files (`rm .github/workflows/ci-backend.yml .github/workflows/ci-frontend.yml`)
-Viewed Makefile:1-35
-Edited Makefile
-Viewed README.md:1-135
-Created DEPLOYMENT.md
-Viewed README.md:1-30
-Viewed README.md:31-135
-Created README.md
-Ran command: Verify backend CI locally (`uv run ruff check . && uv run mypy app/ && uv run pytest -q`)
-Ran command: Verify frontend CI locally (`npm run typecheck && npm run lint && npm run test -- --run && npm run build`)
-Checked task Verify frontend CI locally
-Checked task Verify frontend CI locally
-Checked task Verify frontend CI locally
-Ran command: Verify git status (`git status`)
-Ran command: Review git diff for secrets and safety (`git diff`)
-Ran command: Git status check (`git status`)
-Ran command: Frontend tests check (`npm run typecheck && npm run lint && npm run test -- --run`)
-Checked task Frontend tests check
-Ran command: Backend tests check (`uv run ruff check . && uv run mypy app/ && uv run pytest`)
-
-# DecodeAI — Production Deployment and CI/CD Architecture Report
-
-This report outlines the production deployment configuration and GitHub Actions CI/CD pipeline implemented for **DecodeAI**. 
-
-The solution preserves DecodeAI’s existing architecture:
-- **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS with the interactive presentation slideshow UI.
-- **Backend**: FastAPI + Python 3.12 with Gemini 2.5 Flash as primary generator and Groq Llama 3.3 70B Versatile as automatic fallback.
-- **Storage**: DecodeAI is completely **stateless** — no database, migrations, or object storage are required or introduced.
-- **Free-Tier Target**: Native deployment on **Render** (Python Web Service for backend + Static Site for frontend).
-
----
-
-## 1. Repository Audit & Architecture Adjustments
-
-Before making any infrastructure changes, we audited the existing codebase to identify production gaps:
-
-| Area | Audit Finding | Production Fix Applied |
-| :--- | :--- | :--- |
-| **Database & Migrations** | No database or ORM is used. Lessons are synthesized on-demand or served from predefined fixtures. | Retained purely stateless architecture; no SQL database or Alembic migrations added. |
-| **CORS Origins** | `ALLOWED_ORIGINS` in [backend/app/config.py](file:///home/neha-tiwari/Prakash's%20Folder/Decode%20AI/backend/app/config.py) needed to handle trailing slashes and JSON array formats. | Origin parsing now automatically trims whitespace, strips trailing slashes (`.rstrip("/")`), and accepts comma-separated lists or JSON arrays. |
-| **Health Checks** | Health endpoints were only under `/api/health`. Some PaaS default root probes hit `/` or `/health`. | Mounted [health.py](file:///home/neha-tiwari/Prakash's%20Folder/Decode%20AI/backend/app/routers/health.py) at root (`/`, `/health`) as well as `/api/health`. Added integration tests. |
-| **Vite Client Routing** | Single-Page Application (SPA) direct navigation to subpaths on static hosting causes 404s without URL rewriting. | Added [frontend/public/_redirects](file:///home/neha-tiwari/Prakash's%20Folder/Decode%20AI/frontend/public/_redirects) (`/* /index.html 200`) and configured SPA rewrites in [render.yaml](file:///home/neha-tiwari/Prakash's%20Folder/Decode%20AI/render.yaml). |
-| **API Base URL Sanitization** | Trailing slashes on `VITE_API_BASE_URL` could produce double slashes like `//api/lessons/generate`. | Sanitized in [frontend/src/services/api.ts](file:///home/neha-tiwari/Prakash's%20Folder/Decode%20AI/frontend/src/services/api.ts) with `.trim().replace(/\/+$/, '')`. |
-| **CI/CD Redundancy** | Two separate workflows (`ci-backend.yml`, `ci-frontend.yml`) existed with no deployment integration. | Consolidated into a single unified pipeline [.github/workflows/ci-cd.yml](file:///home/neha-tiwari/Prakash's%20Folder/Decode%20AI/.github/workflows/ci-cd.yml) with automated, gated Render deploy hooks. |
-
----
-
-## 2. Inventory of Created & Modified Files
-
-### Created Files
-- [render.yaml](file:///home/neha-tiwari/Prakash's%20Folder/Decode%20AI/render.yaml): Render Blueprint declaring the `decodeai-backend` Python web service and `decodeai-frontend` static site as Infrastructure-as-Code.
-- [.github/workflows/ci-cd.yml](file:///home/neha-tiwari/Prakash's%20Folder/Decode%20AI/.github/workflows/ci-cd.yml): Unified GitHub Actions workflow with lint, typecheck, unit tests, integration tests, and secret-masked sequential deploy jobs.
-- [DEPLOYMENT.md](file:///home/neha-tiwari/Prakash's%20Folder/Decode%20AI/DEPLOYMENT.md): Detailed operations guide covering Blueprint sync, manual dashboard setup, secret configuration, cold start characteristics, and verification procedures.
-- [frontend/public/_redirects](file:///home/neha-tiwari/Prakash's%20Folder/Decode%20AI/frontend/public/_redirects): Static redirect rule ensuring client-side routes resolve to `index.html`.
-- [frontend/.env.example](file:///home/neha-tiwari/Prakash's%20Folder/Decode%20AI/frontend/.env.example): Production and development environment variable template for the frontend.
-
-### Modified Files
-- [backend/app/config.py](file:///home/neha-tiwari/Prakash's%20Folder/Decode%20AI/backend/app/config.py): Robust CORS origin parsing and runtime key validation.
-- [backend/app/routers/health.py](file:///home/neha-tiwari/Prakash's%20Folder/Decode%20AI/backend/app/routers/health.py): Added root `/` and `/health` probe endpoints alongside `/api/health`.
-- [backend/app/main.py](file:///home/neha-tiwari/Prakash's%20Folder/Decode%20AI/backend/app/main.py): Registered health router at both `/api` and root `/`.
-- [backend/Makefile](file:///home/neha-tiwari/Prakash's%20Folder/Decode%20AI/backend/Makefile): Added `start` target and updated `install` target to use `uv sync --extra dev`.
-- [backend/.env.example](file:///home/neha-tiwari/Prakash's%20Folder/Decode%20AI/backend/.env.example): Production environment variable template documenting required and optional keys.
-- [backend/tests/integration/test_routes.py](file:///home/neha-tiwari/Prakash's%20Folder/Decode%20AI/backend/tests/integration/test_routes.py): Added tests verifying `/`, `/health`, and `/api/health`.
-- [backend/tests/unit/test_models.py](file:///home/neha-tiwari/Prakash's%20Folder/Decode%20AI/backend/tests/unit/test_models.py): Added tests for CORS trailing-slash stripping and JSON array string parsing.
-- [frontend/src/services/api.ts](file:///home/neha-tiwari/Prakash's%20Folder/Decode%20AI/frontend/src/services/api.ts): Trailing slash sanitization for `VITE_API_BASE_URL`.
-- [README.md](file:///home/neha-tiwari/Prakash's%20Folder/Decode%20AI/README.md): Updated with CI/CD status badges, presentation UI documentation, local run instructions, and deployment references.
-- **Removed**: Redundant `.github/workflows/ci-backend.yml` and `.github/workflows/ci-frontend.yml`.
-
----
-
-## 3. Render Blueprint Architecture (`render.yaml`)
-
-```yaml
-services:
-  - type: web
     name: decodeai-backend
-    runtime: python
-    region: oregon
-    plan: free
-    rootDir: backend
-    buildCommand: "pip install uv && uv sync --no-dev"
-    startCommand: "uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT"
-    healthCheckPath: /health
-    autoDeploy: false
-    envVars:
-      - key: PYTHON_VERSION
-        value: "3.12.3"
-      - key: ENVIRONMENT
-        value: production
-      - key: ALLOWED_ORIGINS
-        sync: false
-      - key: GEMINI_API_KEY
-        sync: false
-      - key: GROQ_API_KEY
-        sync: false
-
-  - type: web
-    name: decodeai-frontend
-    runtime: static
-    region: oregon
-    plan: free
-    rootDir: frontend
-    buildCommand: "npm ci && npm run build"
-    staticPublishPath: dist
-    autoDeploy: false
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
-    envVars:
-      - key: VITE_API_BASE_URL
-        sync: false
-```
-
-### Critical Blueprint Design Choices:
-1. **`autoDeploy: false`**: Automatic git push deployment on Render is disabled. This prevents race conditions or duplicate builds, ensuring deployments occur **only** after CI checks pass on `main`.
-2. **Fast & Deterministic Builds**: The backend build uses `pip install uv && uv sync --no-dev`, providing fast dependency resolution from `uv.lock`.
-3. **Secret Isolation**: `GEMINI_API_KEY`, `GROQ_API_KEY`, `ALLOWED_ORIGINS`, and `VITE_API_BASE_URL` are marked `sync: false`, requiring them to be populated in Render’s dashboard to prevent commit leakage.
-
----
-
-## 4. GitHub Actions CI/CD Pipeline
-
-The pipeline in [.github/workflows/ci-cd.yml](file:///home/neha-tiwari/Prakash's%20Folder/Decode%20AI/.github/workflows/ci-cd.yml) enforces strict quality gates:
-
-```mermaid
-flowchart TD
-    Trigger([Push to main or Pull Request]) --> BackendCI[backend-ci Job]
-    Trigger --> FrontendCI[frontend-ci Job]
-
-    subgraph CI Quality Gates
-      BackendCI --> B1[Ruff Lint Check]
-      BackendCI --> B2[Mypy Strict Typecheck]
-      BackendCI --> B3[Pytest Unit + Integration Tests]
-
-      FrontendCI --> F1[TypeScript Typecheck]
-      FrontendCI --> F2[ESLint Check]
-      FrontendCI --> F3[Vitest Suite]
-      FrontendCI --> F4[Vite Production Build]
-    end
-
-    BackendCI -->|Passes & On main| DeployBackend[deploy-backend Job]
-    DeployBackend -->|Trigger Backend Deploy Hook| RenderBackend[(Render Backend Service)]
-
-    FrontendCI -->|Passes & On main| DeployFrontend[deploy-frontend Job]
-    DeployBackend -->|Sequential Dependency| DeployFrontend
-    DeployFrontend -->|Trigger Frontend Deploy Hook| RenderFrontend[(Render Static Frontend)]
-```
-
-### Security & Operational Safeguards:
-- **No Token Leakage**: The webhook triggers suppress query strings and body output:
-  ```bash
-  HTTP_STATUS=$(curl -s -S -o /dev/null -w "%{http_code}" -X POST "${{ secrets.RENDER_BACKEND_DEPLOY_HOOK }}")
-  ```
-- **PR Safety**: Pull Requests execute all linting, typechecking, and test suites across backend and frontend, but the `deploy-*` jobs are skipped via `if: github.ref == 'refs/heads/main' && github.event_name == 'push'`.
-- **Sequential Deployment**: Frontend deployment waits on backend deployment completion (`needs: [frontend-ci, deploy-backend]`), avoiding client downtime against outdated API contracts.
-
----
-
-## 5. Verification & Test Execution Results
-
-All local test suites and linters pass cleanly:
-
-### Backend Quality Suite
-```bash
-$ uv run ruff check . && uv run mypy app/ && uv run pytest
-All checks passed!
-Success: no issues found in 18 source files
-======================== 62 passed, 2 warnings in 4.39s ========================
-```
-- Integration test coverage validates `/api/health`, `/health`, `/`, request validation limits, error formatting, and lesson generation.
-- Unit test coverage validates Gemini client error classifications, Groq fallback triggers, JWT fixture fidelity, and CORS configuration sanitization.
-
-### Frontend Quality Suite
-```bash
-$ npm run typecheck && npm run lint && npm run test -- --run && npm run build
-> decodeai-frontend@0.1.0 typecheck (0 errors)
-> decodeai-frontend@0.1.0 lint (0 errors)
-> decodeai-frontend@0.1.0 test (59 passed across 6 test suites)
-✓ built in 548ms (Vite dist cleanly bundled)
-```
-- Tests confirm slideshow controls (Next, Previous, Jump to Slide), transcript accessibility, audio narration fallback, rate-limit recovery panel, and input validation.
-
----
-
-## 6. Production Setup & Operator Next Steps
-
-To deploy the application live to your Render account, follow these operational steps:
-
-### Step 1: Create Services in Render
-**Option A — Via Blueprint (Recommended):**
-1. Push this repository to GitHub.
-2. In the Render Dashboard, select **New +** $\rightarrow$ **Blueprint**.
-3. Connect your repository. Render will automatically detect [render.yaml](file:///home/neha-tiwari/Prakash's%20Folder/Decode%20AI/render.yaml) and configure `decodeai-backend` and `decodeai-frontend`.
-
-**Option B — Manual Setup:**
-- Refer to Section 3.2 in [DEPLOYMENT.md](file:///home/neha-tiwari/Prakash's%20Folder/Decode%20AI/DEPLOYMENT.md) for manual form fields.
-
-### Step 2: Configure Environment Variables in Render
-- **`decodeai-backend`**:
-  - `GEMINI_API_KEY`: Your Google AI Studio API key (`AIza...`).
-  - `GROQ_API_KEY`: Your Groq API key (`gsk_...`) for fallback.
-  - `ENVIRONMENT`: `production`.
-  - `ALLOWED_ORIGINS`: `https://decodeai-frontend.onrender.com` (replace with your frontend Render URL).
-- **`decodeai-frontend`**:
-  - `VITE_API_BASE_URL`: `https://decodeai-backend.onrender.com` (replace with your backend Render URL).
-
-### Step 3: Configure GitHub Repository Secrets
-In GitHub, navigate to **Settings** $\rightarrow$ **Secrets and variables** $\rightarrow$ **Actions** and add:
-- `RENDER_BACKEND_DEPLOY_HOOK`: The deploy hook URL generated by Render for `decodeai-backend` (found in service Settings $\rightarrow$ Deploy Hook).
-- `RENDER_FRONTEND_DEPLOY_HOOK`: The deploy hook URL generated by Render for `decodeai-frontend`.
-
-### Step 4: Verification Smoke Test
-Once deployed, perform the 6-step smoke-test:
-1. **Root Health**: `curl https://<backend-host>/health` $\rightarrow$ `{"status":"ok",...}`.
-2. **API Health**: `curl https://<backend-host>/api/health` $\rightarrow$ `{"status":"ok",...}`.
-3. **Frontend Load**: Navigate to `https://<frontend-host>/`. Verify the slideshow presentation container, chapter navigation, and clean product layout render without error.
-4. **Fixture Demo**: Click **View Sample Lesson**. Confirm slides step smoothly through diagrams, explanations, and verification checklists.
-5. **Live Generation**: Submit a technical topic (e.g. *“Explain Database Indexing”*). Confirm the primary generator synthesizes the lesson, and browser-native narration operates correctly.
-6. **Free-Tier Waking**: If the service has been idle (>15 min), ensure the frontend's 3-phase loading animation gracefully covers the Render cold-start latency.
-
----
-
-> [!NOTE]
-> All configuration files, IaC blueprints, redirect rules, and CI/CD pipelines are fully prepared and tested locally. Live deployment is triggered as soon as you push to your GitHub remote and configure your Render deploy hooks. Full operational instructions are available in [DEPLOYMENT.md](file:///home/neha-tiwari/Prakash's%20Folder/Decode%20AI/DEPLOYMENT.md).backend
     runtime: python
     plan: free
     region: oregon
     rootDir: backend
     buildCommand: pip install uv && uv sync --no-dev
     startCommand: uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT
-    healthCheckPath: /api/health
+    healthCheckPath: /health
     autoDeploy: false
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.3
       - key: ENVIRONMENT
         value: production
       - key: GEMINI_API_KEY
@@ -270,8 +44,9 @@ Once deployed, perform the 6-step smoke-test:
   # ---------------------------------------------------------------------------
   # 2. Frontend Static Site (React + Vite)
   # ---------------------------------------------------------------------------
-  - type: static
+  - type: web
     name: decodeai-frontend
+    runtime: static
     plan: free
     region: oregon
     rootDir: frontend
