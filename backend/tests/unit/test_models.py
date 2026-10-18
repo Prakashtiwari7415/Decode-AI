@@ -75,10 +75,13 @@ def test_lesson_fixture_round_trips_through_json() -> None:
 
 def test_settings_allowed_origins_sanitization() -> None:
     """Verify that Settings sanitizes trailing slashes and handles comma/JSON origin formats."""
-    from app.config import Settings
+    import os
+
+    from app.config import DEFAULT_ALLOWED_ORIGINS, Settings
 
     # Comma-separated with trailing slashes and whitespace
     s1 = Settings(
+        _env_file=None,
         gemini_api_key="dev-placeholder-key",
         allowed_origins="https://decodeai.onrender.com/, http://localhost:5173/ ",
     )
@@ -86,7 +89,33 @@ def test_settings_allowed_origins_sanitization() -> None:
 
     # JSON array string with trailing slashes
     s2 = Settings(
+        _env_file=None,
         gemini_api_key="dev-placeholder-key",
         allowed_origins='["https://decodeai.onrender.com/", "http://127.0.0.1:5173"]',
     )
     assert s2.allowed_origins == ["https://decodeai.onrender.com", "http://127.0.0.1:5173"]
+
+    # Single plain string without JSON brackets or commas
+    s3 = Settings(
+        _env_file=None,
+        gemini_api_key="dev-placeholder-key",
+        allowed_origins="https://decodeai-frontend.onrender.com/",
+    )
+    assert s3.allowed_origins == ["https://decodeai-frontend.onrender.com"]
+
+    # Default contains production frontend URL
+    s_default = Settings(_env_file=None, gemini_api_key="dev-placeholder-key")
+    assert "https://decodeai-frontend.onrender.com" in s_default.allowed_origins
+    assert s_default.allowed_origins == DEFAULT_ALLOWED_ORIGINS
+
+    # Environment variable loading (plain string must not crash Pydantic Settings EnvSettingsSource)
+    old_env = os.environ.get("ALLOWED_ORIGINS")
+    try:
+        os.environ["ALLOWED_ORIGINS"] = "https://decodeai-frontend.onrender.com"
+        s_env = Settings(_env_file=None, gemini_api_key="dev-placeholder-key")
+        assert s_env.allowed_origins == ["https://decodeai-frontend.onrender.com"]
+    finally:
+        if old_env is not None:
+            os.environ["ALLOWED_ORIGINS"] = old_env
+        else:
+            os.environ.pop("ALLOWED_ORIGINS", None)

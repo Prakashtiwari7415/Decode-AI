@@ -35,12 +35,18 @@ def create_app() -> FastAPI:
     settings = get_settings()
 
     # CORS Middleware configuration
+    cors_origins = (
+        list(settings.allowed_origins)
+        if isinstance(settings.allowed_origins, (list, tuple))
+        else [str(settings.allowed_origins)]
+    )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.allowed_origins,
+        allow_origins=cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["Retry-After", "Server-Timing"],
     )
 
     # Register API routers under /api prefix and at root for deployment health checks

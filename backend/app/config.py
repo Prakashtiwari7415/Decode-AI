@@ -6,13 +6,19 @@ from typing import Any
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+DEFAULT_ALLOWED_ORIGINS: list[str] = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://decodeai-frontend.onrender.com",
+]
+
 
 class Settings(BaseSettings):
     """DecodeAI backend configuration settings loaded from environment or .env file."""
 
     gemini_api_key: str = ""
     environment: str = "development"
-    allowed_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    allowed_origins: list[str] | str = DEFAULT_ALLOWED_ORIGINS
     rate_limit_per_minute: int = 10
     gemini_model: str = "gemini-3.8-flash"
     gemini_timeout_seconds: float = 30.0
@@ -42,8 +48,13 @@ class Settings(BaseSettings):
         def sanitize_origin(origin: str) -> str:
             return origin.strip().rstrip("/")
 
+        if not value:
+            return list(DEFAULT_ALLOWED_ORIGINS)
+
         if isinstance(value, str):
             val = value.strip()
+            if not val:
+                return list(DEFAULT_ALLOWED_ORIGINS)
             if val.startswith("[") and val.endswith("]"):
                 try:
                     parsed = json.loads(val)
@@ -54,7 +65,7 @@ class Settings(BaseSettings):
             return [sanitize_origin(origin) for origin in val.split(",") if origin.strip()]
         if isinstance(value, list):
             return [sanitize_origin(str(origin)) for origin in value if str(origin).strip()]
-        return ["http://localhost:5173", "http://127.0.0.1:5173"]
+        return list(DEFAULT_ALLOWED_ORIGINS)
 
     def validate_runtime(self) -> None:
         """Validate startup preconditions.

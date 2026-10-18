@@ -279,3 +279,52 @@ def test_generate_lesson_injection_content_returns_400() -> None:
     data = response.json()
     assert data.get("status") == 400
     assert "detail" in data
+
+
+def test_cors_preflight_options_for_production_frontend() -> None:
+    """Verify preflight OPTIONS /api/lessons/generate allows production Render frontend."""
+    headers = {
+        "Origin": "https://decodeai-frontend.onrender.com",
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "content-type,accept",
+    }
+    response = client.options("/api/lessons/generate", headers=headers)
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == "https://decodeai-frontend.onrender.com"
+    assert response.headers.get("access-control-allow-credentials") == "true"
+    allowed_methods = response.headers.get("access-control-allow-methods", "")
+    assert "POST" in allowed_methods
+
+
+def test_cors_post_request_for_production_frontend() -> None:
+    """Verify POST /api/lessons/generate returns CORS headers for production frontend."""
+    headers = {
+        "Origin": "https://decodeai-frontend.onrender.com",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    payload = {
+        "content": "Explain how database indexing works with B-Trees",
+        "content_type": "explanation",
+        "language": "en",
+        "detail_level": "standard",
+        "use_fixture": True,
+    }
+    response = client.post("/api/lessons/generate", headers=headers, json=payload)
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == "https://decodeai-frontend.onrender.com"
+    assert response.headers.get("access-control-allow-credentials") == "true"
+    exposed_headers = response.headers.get("access-control-expose-headers", "")
+    assert "Server-Timing" in exposed_headers
+
+
+def test_cors_disallows_unauthorized_origin() -> None:
+    """Verify origins not in ALLOWED_ORIGINS are rejected with 400 Disallowed CORS origin."""
+    headers = {
+        "Origin": "https://unauthorized-domain.com",
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "content-type",
+    }
+    response = client.options("/api/lessons/generate", headers=headers)
+    assert response.status_code == 400
+    assert "Disallowed CORS origin" in response.text
