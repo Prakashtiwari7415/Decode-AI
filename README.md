@@ -1,5 +1,10 @@
 # DecodeAI — Understand AI Code
 
+Live Demo Link:https://decodeai-frontend.onrender.com/
+
+<img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/3b620b08-b943-499d-a80f-8a54431e0024" />
+
+
 [![CI/CD Pipeline](https://github.com/decodeai/decodeai/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/decodeai/decodeai/actions/workflows/ci-cd.yml)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![React](https://img.shields.io/badge/React-18.3+-61DAFB.svg?logo=react&logoColor=black)](https://react.dev)
