@@ -3,10 +3,17 @@
 Live Demo Link:https://decodeai-frontend.onrender.com/
 
 
+
+<img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/7a165f9f-1f03-4e0f-81eb-9cf5f4e99f70" />
+
+
+
 <img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/5a4c87d9-c6df-4702-a646-1b5afbb4e9d1" />
 
 
 <img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/3b620b08-b943-499d-a80f-8a54431e0024" />
+
+
 
 
 [![CI/CD Pipeline](https://github.com/decodeai/decodeai/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/decodeai/decodeai/actions/workflows/ci-cd.yml)
