@@ -1,0 +1,363 @@
+1. DecodeAI: Your project story
+
+
+
+
+
+
+
+
+
+DecodeAI
+AI-powered interactive technical learning platform
+
+DecodeAI converts technical explanations, code changes, and errors into structured lessons with slide-by-slide explanations, chapters, captions, diagrams, glossary content, and verification steps.
+
+
+
+Interactive learning
+
+Slides, playback, chapters, captions and visual explanations
+
+
+AI generation
+
+Gemini primary, Groq fallback
+
+
+Full-stack architecture
+
+React, TypeScript, FastAPI, Pydantic
+
+
+Deployment and automation
+
+Render, GitHub Actions, automated checks
+
+
+
+
+2. Your 2–3 minute project introduction
+Use this when an interviewer says, “Tell me about a project you have built.” Speak naturally rather than memorizing every word.
+One of my key projects is DecodeAI, an AI-powered technical learning platform that helps developers understand complex technical concepts, code changes, and errors through structured visual explanations.
+
+The problem I wanted to solve was that AI-generated answers are often presented as long blocks of text or code. Although these answers can be useful, beginners may struggle to understand the concepts step by step.
+
+To address this, I built DecodeAI as a full-stack application. The frontend uses React, TypeScript, Vite, and Tailwind CSS, while the backend uses Python, FastAPI, and Pydantic for API handling and data validation.
+
+The user submits technical content and selects a preferred language and level of detail. The backend generates a structured lesson using Gemini, with Groq configured as a fallback provider for eligible failures. The frontend turns the generated lesson into a slide-by-slide learning experience with chapters, captions, diagrams, glossary information, and verification steps.
+
+One important engineering decision was to separate lesson generation from lesson presentation. This allows the frontend to render structured lesson data rather than depend on a single block of generated text. I also included evidence-grounding labels such as observed, inferred, and needs verification to help users distinguish directly supported information from interpretations that require checking.
+
+Another major part of the project was deployment. I deployed the frontend and backend separately on Render and worked through production issues involving TypeScript compilation, environment-variable parsing, and cross-origin requests. I also developed a GitHub Actions CI/CD workflow to run tests and quality checks before deployment.
+
+The project helped me gain practical experience in full-stack development, integrating multiple AI providers, API design, testing, debugging production deployments, and CI/CD.
+
+My next focus is improving reliability, measuring lesson quality, and expanding the platform based on user feedback.
+
+
+
+
+3. Questions interviewers may ask during a project video
+Companies may ask you to record a short video, share your screen, demonstrate a project, or answer follow-up questions about your contribution.
+A. A suggested 3-minute demo
+
+0:00–0:25 — Introduce the problem
+
+Explain why technical answers can be difficult for beginners to understand and why you created DecodeAI.
+
+
+
+
+0:25–1:15 — Demonstrate the product
+
+Submit a prompt such as “Explain how JWT authentication works.” Show the generated lesson, slide navigation, chapters, captions, diagrams, and glossary.
+
+
+
+
+1:15–2:10 — Explain the architecture
+
+Describe how the React frontend calls FastAPI, how Pydantic validates input, how the AI provider generates structured output, and how the frontend renders the lesson.
+
+
+
+
+2:10–2:40 — Share a real challenge
+
+Explain the production CORS bug or TypeScript build issue, how you investigated it, and how you verified the fix.
+
+
+
+
+2:40–3:00 — Conclude
+
+State what you learned, what works today, and one meaningful improvement you plan to make.
+
+
+
+B. Video-interview questions and sample answers
+Q1. What problem does DecodeAI solve?
+
+Answer: DecodeAI makes technical information easier to learn by transforming submitted technical content into structured, visual lessons. Instead of presenting only a long text response, it organizes the explanation into slides, chapters, captions, and supporting learning material.
+
+Q2. Why did you build this instead of using an existing AI chatbot?
+
+Answer: I wanted to explore a different presentation layer for AI-generated information. A conventional chatbot focuses on conversation, whereas DecodeAI focuses on a guided learning experience. My main engineering challenge was transforming a generated explanation into structured content that the frontend could render consistently.
+
+Q3. What was your personal contribution?
+
+Answer: I worked on the full-stack implementation, including the React interface, FastAPI endpoints, AI-provider integration, structured lesson handling, testing, deployment configuration, and CI/CD. I also debugged production issues after deploying the application.
+
+Only claim the areas you personally implemented or can explain in detail.
+
+Q4. What was the hardest problem you faced?
+
+Answer: One of the hardest problems was a CORS failure that appeared in the browser even though the backend health endpoint was responding. I tested the production preflight request directly and found that the configured frontend origin was being rejected. I then traced the issue to Pydantic settings parsing: the origin was configured as a plain string, but the settings field expected a list, causing environment-variable parsing to fail. I corrected the parsing and origin configuration, added regression tests, and verified the production request after redeployment.
+
+Q5. What would you improve if you had another month?
+
+Answer: I would add systematic lesson-quality evaluation, measure generation latency and failure rates, expand automated end-to-end tests, and collect user feedback. I would also review dependency vulnerabilities and strengthen production observability before expanding the user base.
+
+Q6. How do you know the project works?
+
+Answer: I verify it at multiple levels: automated unit and integration tests, static checks, production builds, backend health checks, and manual testing of the deployed application. My latest reported local checks included 65 backend tests and 59 frontend tests passing. I also verified the deployed backend and resolved the frontend-to-backend CORS issue.
+
+Be clear that passing tests and a successful demo do not, by themselves, prove production scalability or lesson accuracy.
+
+4. Technical deep-dive: Questions and answers
+These are the questions most likely to separate someone who merely uses AI APIs from someone who understands how to build an AI application.
+A. Architecture and full-stack development
+Q1. Explain the architecture of DecodeAI.
+Answer:
+
+The frontend is a React and TypeScript application built with Vite. It captures user input and preferences, sends requests to the FastAPI backend, and renders the structured lesson.
+
+FastAPI handles the HTTP endpoints, while Pydantic validates the request and response data. The backend calls the configured AI provider and returns structured lesson content. The frontend then converts that content into the slide-based learning experience.
+
+The frontend and backend are deployed as separate Render services.
+
+Q2. Why did you choose FastAPI?
+Answer:
+
+FastAPI provides a lightweight way to build Python APIs, supports asynchronous request handling, integrates naturally with Pydantic, and generates OpenAPI documentation automatically. Its validation and API documentation were useful for developing and debugging the lesson-generation endpoint.
+
+Follow-up: What does asynchronous programming help with?
+
+It helps the application handle waiting on network operations, such as AI-provider calls, without blocking the event loop when the code and libraries support asynchronous execution. It does not automatically make CPU-heavy work faster.
+
+Q3. Why React and TypeScript instead of plain JavaScript?
+Answer:
+
+React makes it easier to divide the player, chapter navigation, captions, and lesson scenes into reusable components. TypeScript provides compile-time checks for lesson structures, component props, and API interactions, reducing certain classes of integration errors.
+
+Q4. Why use Pydantic?
+Answer:
+
+Pydantic validates and parses incoming data against declared schemas. It makes invalid request data easier to detect and gives the API a consistent data contract.
+
+It also helps ensure that generated or transformed lesson data conforms to the application's expected structure, although schema validation alone cannot guarantee that an AI explanation is factually correct.
+
+Q5. What happens when a user generates a lesson?
+Answer:
+1. The user submits content and preferences in the frontend.
+2. The frontend calls POST /api/lessons/generate.
+3. FastAPI validates the request.
+4. The backend invokes the primary AI provider.
+5. The provider's output is validated and processed into the expected lesson format.
+6. If an eligible provider failure occurs, the fallback logic may invoke the secondary provider.
+7. The backend returns the lesson data, and the frontend renders it.
+The exact behavior depends on the configured provider, failure type, and response validation logic.
+
+
+B. AI engineering and LLM integration
+Q6. Why did you integrate Gemini and Groq?
+Answer:
+
+Gemini is the primary provider and Groq is configured as a fallback for eligible failures. This gives the application another generation path when the primary provider encounters supported transient errors or output-quality problems.
+
+The fallback is not unconditional. Authentication failures, invalid requests, and safety refusals should not automatically be treated as transient failures. The implementation limits retry and fallback attempts to avoid uncontrolled request amplification.
+
+Important: Don't claim that the fallback guarantees availability. Both providers can fail, and the providers may have different output behavior or limits.
+
+Q7. What is structured output, and why does it matter?
+Answer:
+
+Structured output represents a response using predefined fields and types instead of arbitrary prose. For DecodeAI, a consistent lesson schema allows the frontend to identify scenes, captions, chapters, diagrams, and glossary information.
+
+It makes rendering and validation more predictable. I still need to validate content quality separately because syntactically valid JSON can contain incorrect or incomplete explanations.
+
+Q8. How do you handle hallucinations?
+Answer:
+
+DecodeAI includes evidence-grounding labels such as observed, inferred, and needs_verification, along with verification steps. These labels help communicate the confidence or evidence status of parts of an explanation.
+
+They are not a guarantee that the content is correct. A stronger next step would be to evaluate generated lessons against trusted reference answers and measure factual errors, schema failures, and user-reported issues.
+
+Q9. Why not use RAG?
+Answer:
+
+RAG, or retrieval-augmented generation, retrieves relevant external documents and provides them as context to the model. The current generation workflow does not need to be described as RAG unless a retrieval pipeline is actually implemented.
+
+I would consider RAG if DecodeAI needed source-grounded explanations from official documentation, internal knowledge bases, or a curated set of technical references.
+
+Q10. How would you measure AI quality?
+Answer:
+
+I would measure schema-validity rate, factual correctness against reference material, completeness, relevance to the input, generation latency, provider error rate, and cost per successful lesson. I would also create a representative evaluation dataset and compare provider or prompt changes against the same cases.
+
+
+C. Production debugging and deployment
+These questions are especially valuable because you have real examples from DecodeAI rather than hypothetical answers.
+Q11. What is CORS, and why did DecodeAI have a CORS error?
+Answer:
+
+CORS stands for Cross-Origin Resource Sharing. Browsers use it to determine whether frontend code from one origin is allowed to read responses from another origin.
+
+My frontend and backend were hosted on different Render origins. The browser sent an OPTIONS preflight request before the lesson-generation POST. The backend rejected the production frontend origin because the origin was missing from the effective CORS configuration.
+
+I traced the issue to environment-variable parsing in Pydantic settings, fixed the accepted origin formats and defaults, added tests for the production origin, and verified the preflight response.
+
+Q12. Why can a browser show CORS when the backend is running?
+Answer:
+
+A successful health endpoint proves that the service can respond to that request; it doesn't prove that every route, preflight request, or application response works.
+
+A CORS message can indicate a rejected origin or missing response headers, but it can also mask other failures, such as an unreachable service or an error response without the expected CORS headers. That's why I inspected the request URL, response headers, preflight request, and backend logs instead of assuming the browser message told the whole story.
+
+Q13. How did you fix the TypeScript deployment failure?
+Answer:
+
+The production build failed because some tests referenced Node.js's global variable, which was not available in the clean TypeScript environment used by Render.
+
+I replaced those references with the standard globalThis object, which is available in modern JavaScript environments. I then verified the frontend typecheck, tests, lint, and production build before pushing the fix.
+
+Q14. Explain your CI/CD pipeline.
+Answer:
+
+Continuous Integration runs automated checks whenever code is pushed or a pull request is opened. DecodeAI's workflow checks the backend with Ruff, mypy, and pytest, and the frontend with TypeScript, ESLint, Vitest, and the production build.
+
+Continuous Deployment uses GitHub Actions to trigger the Render deploy hooks after the required checks pass. Production deployment is restricted to pushes to main, and pull requests are intended to run validation without deploying production.
+
+Follow-up: Why deploy only after tests pass?
+
+It reduces the chance of deploying changes that have already failed known checks. It doesn't eliminate all production defects, so post-deployment health checks and monitoring are still necessary.
+
+Q15. How do you keep API keys secure?
+Answer:
+
+API keys are stored in environment variables on the backend hosting platform rather than embedded in frontend code. The frontend should never receive a provider's secret key. I also avoid printing secrets in CI/CD logs and keep deployment hooks in GitHub Actions secrets.
+
+In production, I would also apply least-privilege access, key rotation, usage limits, and secret scanning.
+
+Q16. Why didn't you use a database?
+Answer:
+
+The current application is designed around stateless lesson generation: it receives an input, generates a response, and returns it without requiring persistent storage for the core workflow. That reduces infrastructure and deployment complexity for the initial version.
+
+If I add user accounts, saved lessons, progress tracking, or analytics that need durable records, I would introduce a database and design the corresponding persistence layer.
+
+
+D. Testing, reliability, and security
+Question	Strong answer
+What is the difference between unit and integration tests?	Unit tests isolate a small component; integration tests check interactions between components, such as an API route and its validation or middleware.
+Why use npm ci in CI?	It installs dependencies from the lockfile and is designed for reproducible CI installations.
+What does mypy catch?	It detects many type inconsistencies statically, based on the available annotations and configuration. It does not prove that the application is bug-free.
+What is rate limiting?	Restricting request frequency to help prevent abuse and protect service capacity and provider quotas.
+What is a health check?	An endpoint used to verify that a service is responding. A simple health check may not prove that all dependencies are healthy.
+How would you handle an AI-provider timeout?	Use bounded timeouts, limited retries where appropriate, eligible fallback behavior, useful error messages, and monitoring.
+What is a rollback?	Returning to a previously known-good deployment or version when a new release causes problems.
+What are the npm vulnerability warnings?	Dependency-audit findings that require examining affected packages, severity, exploitability, and available compatible fixes. They should not be ignored or blindly fixed with breaking upgrades.
+
+5. The five hardest questions — practice these first
+These are questions where an interviewer may challenge your initial answer with follow-ups.
+Try answering each question aloud before revealing the suggested answer.
+1. Why didn't your CORS fix consist only of adding the frontend URL?
+Reveal suggested answer
+
+2. Does having Gemini and Groq make your application highly available?
+Reveal suggested answer
+
+3. How do you know generated lessons are correct?
+Reveal suggested answer
+
+4. What happens if backend tests pass but frontend tests fail?
+Reveal suggested answer
+
+5. What would you do if the application suddenly became slow?
+Reveal suggested answer
+
+6. What to add to your resume
+For software engineering internships and fresher roles, keep DecodeAI to two or three strong bullets. Emphasize engineering decisions, implementation, testing, and deployment—not a long list of technologies.
+DecodeAI — AI-Powered Technical Learning Platform | React, TypeScript, Python, FastAPI, Pydantic, Gemini, Groq, GitHub Actions, Render
+- Built a full-stack AI-powered learning platform that transforms technical prompts and code-related content into structured, slide-based lessons with chapters, captions, diagrams, glossary content, and verification steps.
+- Integrated Gemini as the primary LLM with Groq fallback for eligible failures, implementing structured lesson handling, request validation, and evidence-grounding labels to improve the clarity and reliability of generated explanations.
+- Deployed the frontend and FastAPI backend on Render and developed a GitHub Actions CI/CD workflow covering automated tests, linting, type checks, and production builds before deployment.
+
+
+
+
+These bullets are suitable if they accurately reflect the code you can demonstrate. If space is limited, use the first and third bullets and explain the AI integration during interviews.
+How to make the bullets stronger
+Add verified metrics only when you have measured them. Useful metrics include:
+- Lesson-generation success rate.
+- Median and 95th-percentile generation latency.
+- Percentage of AI responses passing schema validation.
+- Number of automated tests.
+- Time required to deploy a change.
+- Results from a structured lesson-quality evaluation.
+Do not invent user counts, performance improvements, accuracy percentages, or cost savings.
+7. Other questions companies may ask
+These are common follow-up questions for project-based interviews, especially when you share a repository or record a video.
+“Did you build this project alone?”
+
+Explain your actual contribution honestly, including any assistance from AI coding tools. Be ready to explain the code, architecture, tests, and decisions you personally understand.
+
+“What part did you find most technically challenging?”
+
+Use the Pydantic environment-parsing and CORS incident. Explain the original symptom, how you narrowed it down, the root cause, the code-level fix, and the regression tests.
+
+“What happens if the LLM returns invalid JSON?”
+
+Explain the actual validation and error-handling path in your code. If invalid output triggers a repair or fallback attempt, explain when and how. Do not claim that behavior exists unless you can show it.
+
+“What trade-off did you make?”
+
+One example is keeping the first version stateless. It simplifies hosting and avoids database-management overhead, but it doesn't provide persistent saved lessons or user progress without additional infrastructure.
+
+“How would you scale to thousands of users?”
+
+First measure actual bottlenecks. Then consider request quotas, caching where safe, asynchronous job processing for long generations, provider concurrency limits, observability, and persistent storage if product requirements demand it.
+
+“Can you show me the code?”
+
+Be ready to navigate to the API route, Pydantic request/response schemas, AI-provider integration, fallback logic, frontend API client, lesson player, and GitHub Actions workflow. You should be able to explain why each part exists.
+
+
+8. Your interview preparation plan
+Given that DecodeAI is now deployed, I would prioritize the following over adding more features.
+
+Day 1 — Project explanation
+
+Practice the 2–3 minute introduction and demo. Draw the architecture from memory and explain the complete request flow.
+
+
+
+
+Day 2 — AI and backend
+
+Revise LLM APIs, structured output, validation, fallback policies, FastAPI, Pydantic, asynchronous requests, timeouts, and error handling.
+
+
+
+
+Day 3 — Deployment and debugging
+
+Practice explaining CORS, environment variables, Render, GitHub Actions, test gates, deployment failures, secrets, and rollbacks.
+
+
+
+
+Day 4 — Mock interview
+
+Answer project questions aloud without reading. Follow each answer with “Why did I choose this?”, “What could fail?”, and “How did I verify it?”
