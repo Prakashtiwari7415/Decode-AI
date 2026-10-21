@@ -1,7 +1,7 @@
 """Integration tests for DecodeAI API endpoints."""
 
 import os
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -177,15 +177,16 @@ def test_generate_lesson_gemini_429_groq_fallback_succeeds() -> None:
     mock_groq_lesson = Lesson.model_validate(MOCK_GENERATED_LESSON)
     mock_groq_lesson.gemini_model_version = "groq/openai/gpt-oss-120b"
 
+    mock_groq = MagicMock(spec=GroqClient)
+    mock_groq.model_name = "openai/gpt-oss-120b"
+    mock_groq.is_configured.return_value = True
+    mock_groq.generate_lesson = AsyncMock(return_value=mock_groq_lesson)
+
     with patch(
         "app.services.gemini_client.GeminiClient.generate_lesson",
         new_callable=AsyncMock,
         side_effect=GeminiRateLimitError("Rate limit exceeded"),
-    ), patch(
-        "app.services.groq_client.GroqClient.generate_lesson",
-        new_callable=AsyncMock,
-        return_value=mock_groq_lesson,
-    ), patch.object(GroqClient, "is_configured", return_value=True):
+    ), patch("app.services.lesson_builder.GroqClient", return_value=mock_groq):
         response = client.post("/api/lessons/generate", json=payload)
         assert response.status_code == 200
         data = response.json()
@@ -204,15 +205,16 @@ def test_generate_lesson_both_providers_fail_returns_502() -> None:
         "use_fixture": False,
     }
 
+    mock_groq = MagicMock(spec=GroqClient)
+    mock_groq.model_name = "openai/gpt-oss-120b"
+    mock_groq.is_configured.return_value = True
+    mock_groq.generate_lesson = AsyncMock(side_effect=GroqError("Groq 500"))
+
     with patch(
         "app.services.gemini_client.GeminiClient.generate_lesson",
         new_callable=AsyncMock,
         side_effect=GeminiRateLimitError("Gemini 429"),
-    ), patch(
-        "app.services.groq_client.GroqClient.generate_lesson",
-        new_callable=AsyncMock,
-        side_effect=GroqError("Groq 500"),
-    ), patch.object(GroqClient, "is_configured", return_value=True):
+    ), patch("app.services.lesson_builder.GroqClient", return_value=mock_groq):
         response = client.post("/api/lessons/generate", json=payload)
         assert response.status_code == 502
         data = response.json()

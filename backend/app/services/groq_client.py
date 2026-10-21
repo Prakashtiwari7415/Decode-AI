@@ -92,7 +92,7 @@ class GroqClient:
         self.timeout_seconds = timeout_seconds
         self.base_url = base_url
 
-        if self.is_configured():
+        if self.is_configured() and self.api_key:
             self._client: AsyncOpenAI | None = AsyncOpenAI(
                 api_key=self.api_key,
                 base_url=self.base_url,
